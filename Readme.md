@@ -1,6 +1,6 @@
 Проверка установки Angie (СПО версия) и дополнительных модулей к нему:
 
-zubahin@compute-vm-angie01:~$ sudo apt-get install -y angie
+"zubahin@compute-vm-angie01:~$ sudo apt-get install -y angie
 Reading package lists... Done
 Building dependency tree... Done
 Reading state information... Done
@@ -17,7 +17,7 @@ Preparing to unpack .../angie_1.10.3-1~noble_amd64.deb ...
 Unpacking angie (1.10.3-1~noble) ...
 Setting up angie (1.10.3-1~noble) ...
 Created symlink /etc/systemd/system/multi-user.target.wants/angie.service → /usr/lib/systemd/system/angie.service.
-----------------------------------------------------------------------
+----------------------------------------------------------------------"
 
 Thanks for using Angie!
 
