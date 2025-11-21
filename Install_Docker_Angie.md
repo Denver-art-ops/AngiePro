@@ -25,7 +25,7 @@ TriggeredBy: ● docker.socket
 
 ```
 docker run --name angie -v /var/www/html:/usr/share/angie/html:ro \
- -p 8800:80 -d dock
+ -p 8800:80 -d docker.angie.software/angie:latest
 ```
 ```
 zubahin@compute-vm-angie01:~$ sudo docker run --name angie -v /var/www/html:/usr/share/angie/html:ro \
