@@ -27,10 +27,10 @@ TriggeredBy: ● docker.socket
 docker run --name angie -v /var/www/html:/usr/share/angie/html:ro \
  -p 8800:80 -d docker.angie.software/angie:latest
 ```
-Здесь docker.angie.software/angie:latest  - адрес репозитория Angie
-Имя контейнера (name) angie
-монтируем директорию на хостовой системе /var/www/html к директории на контейнере /usr/share/angie/html в режиме ReadOnly
-пробрасываем порт 8800 на хостовой системе на 80 порт на контейнере
+Здесь docker.angie.software/angie:latest  - адрес репозитория Angie /br
+Имя контейнера (name) angie /br
+монтируем директорию на хостовой системе /var/www/html к директории на контейнере /usr/share/angie/html в режиме ReadOnly /br
+пробрасываем порт 8800 на хостовой системе на 80 порт на контейнере /br
 
 
 ```
