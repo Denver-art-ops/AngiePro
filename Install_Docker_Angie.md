@@ -21,85 +21,23 @@ TriggeredBy: ● docker.socket
              └─6979 /usr/bin/dockerd -H fd:// --containerd=/run/containerd/containerd.sock
 ```
 
-#### Шаг 2: Подключились к консоли и выполнили все рекомендации по установке:
-
-Debian, Ubuntu 
-Установите вспомогательные пакеты для подключения репозитория Angie: 
-```
-sudo apt-get update
-```
+#### Шаг 2: Ставим образ Angie
 
 ```
-sudo apt-get install -y ca-certificates curl
+docker run --name angie -v /var/www/html:/usr/share/angie/html:ro \
+ -p 8800:80 -d dock
 ```
-
-Скачайте открытый ключ репозитория Angie для проверки подлинности пакетов: 
 ```
-sudo curl -o /etc/apt/trusted.gpg.d/angie-signing.gpg \\ https://angie.software/keys/angie-signing.gpg
+zubahin@compute-vm-angie01:~$ sudo docker run --name angie -v /var/www/html:/usr/share/angie/html:ro \
+ -p 8800:80 -d docker.angie.software/angie:latest
+Unable to find image 'docker.angie.software/angie:latest' locally
+latest: Pulling from angie
+f637881d1138: Pull complete 
+a4c1f716105c: Pull complete 
+2155a2bb836c: Pull complete 
+d8084345baa5: Pull complete 
+974a23b277e5: Pull complete 
+Digest: sha256:f79d88b4971d1357a57b50b49702a8162fbb9164e5ce1e591374b188fa520a30
+Status: Downloaded newer image for docker.angie.software/angie:latest
+eaa279290873250c3b7202c4fbc73da2c6f73959144e051edd97e832e7d92e56
 ```
-
-Подключите репозиторий Angie:
-```
-echo "deb https://download.angie.software/angie/$(. /etc/os-release && echo "$ID/$VERSION\_ID $VERSION\_CODENAME") main" \\ | sudo tee /etc/apt/sources.list.d/angie.list > /dev/null
-```
-
-Обновите индексы репозиториев: 
-```
-sudo apt-get update
-```
-
-Установите пакет Angie: 
-```
-sudo apt-get install -y angie
-```
-
-(Необязательно) Установите пакеты необходимых вам дополнений:
-```
-sudo apt-get install -y <ИМЯ ПАКЕТА>/br
-```
-
-### Результат
-
-```
-zubahin@compute-vm-angie01:~$ sudo apt-get install -y angie-module-image-filter\*\*
-Reading package lists...
-Done Building dependency tree...
-Done Reading state information...
-Done The following NEW packages will be installed: angie-module-image-filter 0 upgraded, 1 newly installed, 0 to remove and 13 not upgraded.
-Need to get 16.5 kB of archives. After this operation, 72.7 kB of additional disk space will be used.
-Get:1 https://download.angie.software/angie/ubuntu/24.04 noble/main amd64 angie-module-image-filter amd64 1.10.3-1~noble \[16.5 kB\]
-Fetched 16.5 kB in 0s (116 kB/s) Selecting previously unselected package angie-module-image-filter.
-(Reading database ... 106354 files and directories currently installed.)
-Preparing to unpack .../angie-module-image-filter\_1.10.3-1~noble\_amd64.deb ...
-Unpacking angie-module-image-filter (1.10.3-1~noble) ...
-Setting up angie-module-image-filter (1.10.3-1~noble) ...
----------------------------------------------------------------------- The image-filter dynamic module for Angie has been installed.
-To enable this module, add the following to /etc/angie/angie.conf and reload angie:
-load\_module modules/ngx\_http\_image\_filter\_module.so;
-Please refer to the modules documentation for further details: https://en.angie.software/angie/docs/configuration/modules/http/http\_image\_filter/
----------------------------------------------------------------------- Scanning processes...
-Scanning linux images...
-Running kernel seems to be up-to-date.
-No services need to be restarted. No containers need to be restarted. No user sessions are running outdated binaries.
-No VM guests are running outdated hypervisor (qemu) binaries on this host.
-```
-
-```
-zubahin@compute-vm-angie01:~$ angie -V
-Angie version: Angie/1.10.3
-nginx version: nginx/1.27.5
-built on Thu, 13 Nov 2025 10:52:28 GMT
-built with OpenSSL 3.0.13 30 Jan 2024
-TLS SNI support enabled configure arguments: --prefix=/etc/angie --conf-path=/etc/angie/angie.conf --error-log-path=/var/log/angie/error.log --http-log-
-path=/var/log/angie/access.log --lock-path=/run/angie.lock --modules-path=/usr/lib/angie/modules --pid-path=/run/angie.pid --sbin-path=/usr/sbin/angie
---http-acme-client-path=/var/lib/angie/acme --http-client-body-temp-path=/var/cache/angie/client\_temp --http-fastcgi-temp-path=/var/cache/angie/fastcgi\_temp
---http-proxy-temp-path=/var/cache/angie/proxy\_temp --http-scgi-temp-path=/var/cache/angie/scgi\_temp --http-uwsgi-temp-path=/var/cache/angie/uwsgi\_temp
---user=angie --group=angie --with-file-aio --with-http\_acme\_module --with-http\_addition\_module --with-http\_auth\_request\_module --with-http\_dav\_module
- --with-http\_flv\_module --with-http\_gunzip\_module --with-http\_gzip\_static\_module --with-http\_mp4\_module --with-http\_random\_index\_module
---with-http\_realip\_module --with-http\_secure\_link\_module --with-http\_slice\_module --with-http\_ssl\_module --with-http\_stub\_status\_module
---with-http\_sub\_module --with-http\_v2\_module --with-http\_v3\_module --with-mail --with-mail\_ssl\_module --with-stream --with-stream\_acme\_module
---with-stream\_mqtt\_preread\_module --with-stream\_rdp\_preread\_module --with-stream\_realip\_module --with-stream\_ssl\_module --with-
-stream\_ssl\_preread\_module --with-threads --feature-cache=../angie-feature-cache --with-ld-opt='-Wl,-Bsymbolic-functions -flto=auto -ffat-lto-objects -Wl,
--z,relro -Wl,-z,now' zubahin@compute-vm-angie01:~$
-```
-
