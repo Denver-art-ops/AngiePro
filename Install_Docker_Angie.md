@@ -59,3 +59,13 @@ zubahin@compute-vm-angie01:~$ sudo docker ps -a
 CONTAINER ID   IMAGE                                COMMAND                  CREATED         STATUS         PORTS                                     NAMES
 eaa279290873   docker.angie.software/angie:latest   "angie -g 'daemon of…"   9 minutes ago   Up 9 minutes   0.0.0.0:8800->80/tcp, [::]:8800->80/tcp   angie
 ```
+
+Запускаем Angie:
+```
+sudo docker start angie
+```
+
+Проверяем, что открывается стартовая страница:
+
+[Docker2.png](Docker2.png) 
+
