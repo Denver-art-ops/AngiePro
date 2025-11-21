@@ -48,3 +48,14 @@ Digest: sha256:f79d88b4971d1357a57b50b49702a8162fbb9164e5ce1e591374b188fa520a30
 Status: Downloaded newer image for docker.angie.software/angie:latest
 eaa279290873250c3b7202c4fbc73da2c6f73959144e051edd97e832e7d92e56
 ```
+
+### Шаг 3.  Проверяем установку:
+```
+sudo docker ps -a
+```
+
+```
+zubahin@compute-vm-angie01:~$ sudo docker ps -a
+CONTAINER ID   IMAGE                                COMMAND                  CREATED         STATUS         PORTS                                     NAMES
+eaa279290873   docker.angie.software/angie:latest   "angie -g 'daemon of…"   9 minutes ago   Up 9 minutes   0.0.0.0:8800->80/tcp, [::]:8800->80/tcp   angie
+```
