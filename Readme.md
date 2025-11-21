@@ -1,6 +1,6 @@
 Проверка установки Angie (СПО версия) и дополнительных модулей к нему:
 
-"zubahin@compute-vm-angie01:~$ sudo apt-get install -y angie
+"zubahin@compute-vm-angie01:~"$" sudo apt-get install -y angie
 Reading package lists... Done
 Building dependency tree... Done
 Reading state information... Done
@@ -38,7 +38,7 @@ No containers need to be restarted.
 No user sessions are running outdated binaries.
 
 No VM guests are running outdated hypervisor (qemu) binaries on this host.
-zubahin@compute-vm-angie01:~$ angie -v
+zubahin@compute-vm-angie01:~"$" angie -v
 Angie version: Angie/1.10.3
 zubahin@compute-vm-angie01:~$ angie -V
 Angie version: Angie/1.10.3
