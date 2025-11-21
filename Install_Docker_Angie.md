@@ -67,5 +67,5 @@ sudo docker start angie
 
 Проверяем, что открывается стартовая страница:
 
-[Docker2.png](Docker2.png) 
+![Docker2.png](Docker2.png) 
 
