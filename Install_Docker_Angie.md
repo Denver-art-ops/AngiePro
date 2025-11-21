@@ -1,9 +1,25 @@
 ### Установка docker:
 
-#### Шаг 1:
-Создали ВМ в облаке:
-
-![YC.png](YC.png)
+#### Шаг 1: Установка Docker
+Устанавливаем докер:
+```
+sudo apt install docker.io
+```
+Проверяем, что процесс докер запущен:
+```
+zubahin@compute-vm-angie01:~$ systemctl status docker
+● docker.service - Docker Application Container Engine
+     Loaded: loaded (/usr/lib/systemd/system/docker.service; enabled; preset: enabled)
+     Active: active (running) since Fri 2025-11-21 20:32:30 UTC; 6min ago
+TriggeredBy: ● docker.socket
+       Docs: https://docs.docker.com
+   Main PID: 6979 (dockerd)
+      Tasks: 9
+     Memory: 21.1M (peak: 22.2M)
+        CPU: 322ms
+     CGroup: /system.slice/docker.service
+             └─6979 /usr/bin/dockerd -H fd:// --containerd=/run/containerd/containerd.sock
+```
 
 #### Шаг 2: Подключились к консоли и выполнили все рекомендации по установке:
 
