@@ -69,6 +69,7 @@ cp: overwrite '/etc/nginx/nginx.conf'? y
 Проверяем содержимое файла конфигурации nginx:
 
 <details>
+
 ```
 zubahin@compute-vm-angie01:~$ cat /etc/nginx/nginx.conf
 nginx/0000755000000000000000000000000014671024202010675 5ustar  rootrootnginx/mime.types0000644000000000000000000000756514435431402012731 0ustar  rootroot
