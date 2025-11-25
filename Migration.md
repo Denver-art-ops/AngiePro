@@ -314,6 +314,14 @@ No VM guests are running outdated hypervisor (qemu) binaries on this host.
 ```
 </details>
 
+Теперь все в порядке:
+```
+zubahin@compute-vm-angie01:~$ sudo nginx -t
+nginx: the configuration file /etc/nginx/nginx.conf syntax is ok
+nginx: configuration file /etc/nginx/nginx.conf test is successful
+zubahin@compute-vm-angie01:~$ 
+```
+
 Проверяем, что ngnix запущен:
 ```
 zubahin@compute-vm-angie01:~$ !ps
