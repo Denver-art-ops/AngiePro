@@ -322,13 +322,32 @@ nginx: configuration file /etc/nginx/nginx.conf test is successful
 zubahin@compute-vm-angie01:~$ 
 ```
 
-Проверяем, что ngnix запущен:
+Проверяем, что ngnix запущен (видим, что еще не запущен и перезапускаем):
 ```
 zubahin@compute-vm-angie01:~$ !ps
-ps aux | grep ngnix
-zubahin     4093  0.0  0.1   7076  2176 pts/3    S+   19:14   0:00 grep --color=auto ngnix
+ps aux | grep nginx 
+zubahin     4785  0.0  0.1   7076  2176 pts/3    S+   20:15   0:00 grep --color=auto nginx
+zubahin@compute-vm-angie01:~$ sudo systemctl start ngnix
+Failed to start ngnix.service: Unit ngnix.service not found.
+zubahin@compute-vm-angie01:~$ sudo systemctl start nginx
+zubahin@compute-vm-angie01:~$ !ps
+ps aux | grep nginx 
+root        4807  0.0  0.0  23688  1604 ?        Ss   20:15   0:00 nginx: master process /usr/sbin/nginx -g daemon on; master_process on;
+www-data    4808  0.0  0.1  23688  2628 ?        S    20:15   0:00 nginx: worker process
+www-data    4809  0.0  0.1  23688  2628 ?        S    20:15   0:00 nginx: worker process
+www-data    4810  0.0  0.1  23688  2372 ?        S    20:15   0:00 nginx: cache manager process
+www-data    4812  0.0  0.1  23688  2372 ?        S    20:15   0:00 nginx: cache loader process
+zubahin     4823  0.0  0.1   7076  2176 pts/3    S+   20:16   0:00 grep --color=auto nginx
 ```
 
+Ставим nginx в автозагрузку:
+```
+sudo systemctl enable nginx
+
+zubahin@compute-vm-angie01:~$ sudo systemctl enable nginx
+Synchronizing state of nginx.service with SysV service script with /usr/lib/systemd/systemd-sysv-install.
+Executing: /usr/lib/systemd/systemd-sysv-install enable nginx
+```
 
 #### Шаг 3: Подключились к консоли и выполнили все рекомендации по установке angie:
 
