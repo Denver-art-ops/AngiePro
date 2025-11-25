@@ -19,7 +19,7 @@ sudo apt-get install -y ca-certificates curl
 
 Скачайте открытый ключ репозитория Angie для проверки подлинности пакетов: 
 ```
-sudo curl -o /etc/apt/trusted.gpg.d/angie-signing.gpg \\ https://angie.software/keys/angie-signing.gpg
+sudo curl -o /etc/apt/trusted.gpg.d/angie-signing.gpg \ https://angie.software/keys/angie-signing.gpg
 ```
 
 Подключите репозиторий Angie:
