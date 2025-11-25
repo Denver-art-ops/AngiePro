@@ -219,6 +219,20 @@ http {
 ```
 </details>
 
+Проверяем работоспособность ngnix:
+```
+zubahin@compute-vm-angie01:~$ sudo  nginx -t
+2025/11/25 19:58:27 [emerg] 4459#4459: unknown directive "brotli_static" in /etc/nginx/nginx.conf:59
+nginx: configuration file /etc/nginx/nginx.conf test failed
+```
+Находим строчки в конфиге, на которые ругается тест:
+```
+    brotli_static               on;
+    brotli                              on;
+    brotli_comp_level   5;
+    brotli_types                text/plain text/css text/xml application/javascript application/json image/x-icon image/svg+xml;
+```
+
 Проверяем, что ngnix запущен:
 ```
 zubahin@compute-vm-angie01:~$ !ps
