@@ -233,6 +233,8 @@ nginx: configuration file /etc/nginx/nginx.conf test failed
     brotli_types                text/plain text/css text/xml application/javascript application/json image/x-icon image/svg+xml;
 ```
 Нам не хватает модуля brotli.  Его нужно поставить.
+<details>
+     
 ```
 zubahin@compute-vm-angie01:~$ apt search nginx | grep brotli
 
@@ -243,23 +245,74 @@ libnginx-mod-http-brotli-static/noble 1.0.0~rc-5build1 amd64
 zubahin@compute-vm-angie01:~$ 
 zubahin@compute-vm-angie01:~$ 
 zubahin@compute-vm-angie01:~$ 
-zubahin@compute-vm-angie01:~$ 
-zubahin@compute-vm-angie01:~$ apt install libnginx-mod-http-brotli-filter/noble 1.0.0~rc-5build1 amd64
-E: Could not open lock file /var/lib/dpkg/lock-frontend - open (13: Permission denied)
-E: Unable to acquire the dpkg frontend lock (/var/lib/dpkg/lock-frontend), are you root?
-zubahin@compute-vm-angie01:~$ sudo apt install libnginx-mod-http-brotli-filter/noble 1.0.0~rc-5build1 amd64
+zubahin@compute-vm-angie01:~$ sudo apt install libnginx-mod-http-brotli-static/noble
 Reading package lists... Done
 Building dependency tree... Done
 Reading state information... Done
-E: Unable to locate package 1.0.0~rc-5build1
-E: Unable to locate package amd64
-zubahin@compute-vm-angie01:~$ sudo apt install libnginx-mod-http-brotli-static/noble 1.0.0~rc-5build1 amd64
+Selected version '1.0.0~rc-5build1' (Ubuntu:24.04/noble [amd64]) for 'libnginx-mod-http-brotli-static'
+The following NEW packages will be installed:
+  libnginx-mod-http-brotli-static
+0 upgraded, 1 newly installed, 0 to remove and 20 not upgraded.
+Need to get 7322 B of archives.
+After this operation, 34.8 kB of additional disk space will be used.
+Get:1 http://mirror.yandex.ru/ubuntu noble/universe amd64 libnginx-mod-http-brotli-static amd64 1.0.0~rc-5build1 [7322 B]
+Fetched 7322 B in 0s (40.7 kB/s)                          
+Selecting previously unselected package libnginx-mod-http-brotli-static.
+(Reading database ... 106402 files and directories currently installed.)
+Preparing to unpack .../libnginx-mod-http-brotli-static_1.0.0~rc-5build1_amd64.deb ...
+Unpacking libnginx-mod-http-brotli-static (1.0.0~rc-5build1) ...
+Setting up libnginx-mod-http-brotli-static (1.0.0~rc-5build1) ...
+Processing triggers for nginx (1.24.0-2ubuntu7.5) ...
+Scanning processes...                                                                                                                                                 
+Scanning linux images...                                                                                                                                              
+
+Running kernel seems to be up-to-date.
+
+No services need to be restarted.
+
+No containers need to be restarted.
+
+No user sessions are running outdated binaries.
+
+No VM guests are running outdated hypervisor (qemu) binaries on this host.
+zubahin@compute-vm-angie01:~$ apt search nginx | grep brotli
+
+WARNING: apt does not have a stable CLI interface. Use with caution in scripts.
+
+libnginx-mod-http-brotli-filter/noble 1.0.0~rc-5build1 amd64
+libnginx-mod-http-brotli-static/noble,now 1.0.0~rc-5build1 amd64 [installed]
+zubahin@compute-vm-angie01:~$ sudo apt install libnginx-mod-http-brotli-filter/noble
 Reading package lists... Done
 Building dependency tree... Done
 Reading state information... Done
-E: Unable to locate package 1.0.0~rc-5build1
-E: Unable to locate package amd64
+Selected version '1.0.0~rc-5build1' (Ubuntu:24.04/noble [amd64]) for 'libnginx-mod-http-brotli-filter'
+The following NEW packages will be installed:
+  libnginx-mod-http-brotli-filter
+0 upgraded, 1 newly installed, 0 to remove and 20 not upgraded.
+Need to get 9346 B of archives.
+After this operation, 43.0 kB of additional disk space will be used.
+Get:1 http://mirror.yandex.ru/ubuntu noble/universe amd64 libnginx-mod-http-brotli-filter amd64 1.0.0~rc-5build1 [9346 B]
+Fetched 9346 B in 0s (187 kB/s)                           
+Selecting previously unselected package libnginx-mod-http-brotli-filter.
+(Reading database ... 106410 files and directories currently installed.)
+Preparing to unpack .../libnginx-mod-http-brotli-filter_1.0.0~rc-5build1_amd64.deb ...
+Unpacking libnginx-mod-http-brotli-filter (1.0.0~rc-5build1) ...
+Setting up libnginx-mod-http-brotli-filter (1.0.0~rc-5build1) ...
+Processing triggers for nginx (1.24.0-2ubuntu7.5) ...
+Scanning processes...                                                                                                                                                 
+Scanning linux images...                                                                                                                                              
+
+Running kernel seems to be up-to-date.
+
+No services need to be restarted.
+
+No containers need to be restarted.
+
+No user sessions are running outdated binaries.
+
+No VM guests are running outdated hypervisor (qemu) binaries on this host.
 ```
+</details>
 
 Проверяем, что ngnix запущен:
 ```
