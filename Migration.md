@@ -832,6 +832,14 @@ zubahin@compute-vm-angie01:~$
 ```
 </details>
 
+Проверяем, что ngnix запущен:
+```
+zubahin@compute-vm-angie01:~$ !ps
+ps aux | grep ngnix
+zubahin     4093  0.0  0.1   7076  2176 pts/3    S+   19:14   0:00 grep --color=auto ngnix
+```
+
+
 #### Шаг 3: Подключились к консоли и выполнили все рекомендации по установке angie:
 
 Скачайте открытый ключ репозитория Angie для проверки подлинности пакетов: 
