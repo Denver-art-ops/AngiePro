@@ -232,6 +232,34 @@ nginx: configuration file /etc/nginx/nginx.conf test failed
     brotli_comp_level   5;
     brotli_types                text/plain text/css text/xml application/javascript application/json image/x-icon image/svg+xml;
 ```
+Нам не хватает модуля brotli.  Его нужно поставить.
+```
+zubahin@compute-vm-angie01:~$ apt search nginx | grep brotli
+
+WARNING: apt does not have a stable CLI interface. Use with caution in scripts.
+
+libnginx-mod-http-brotli-filter/noble 1.0.0~rc-5build1 amd64
+libnginx-mod-http-brotli-static/noble 1.0.0~rc-5build1 amd64
+zubahin@compute-vm-angie01:~$ 
+zubahin@compute-vm-angie01:~$ 
+zubahin@compute-vm-angie01:~$ 
+zubahin@compute-vm-angie01:~$ 
+zubahin@compute-vm-angie01:~$ apt install libnginx-mod-http-brotli-filter/noble 1.0.0~rc-5build1 amd64
+E: Could not open lock file /var/lib/dpkg/lock-frontend - open (13: Permission denied)
+E: Unable to acquire the dpkg frontend lock (/var/lib/dpkg/lock-frontend), are you root?
+zubahin@compute-vm-angie01:~$ sudo apt install libnginx-mod-http-brotli-filter/noble 1.0.0~rc-5build1 amd64
+Reading package lists... Done
+Building dependency tree... Done
+Reading state information... Done
+E: Unable to locate package 1.0.0~rc-5build1
+E: Unable to locate package amd64
+zubahin@compute-vm-angie01:~$ sudo apt install libnginx-mod-http-brotli-static/noble 1.0.0~rc-5build1 amd64
+Reading package lists... Done
+Building dependency tree... Done
+Reading state information... Done
+E: Unable to locate package 1.0.0~rc-5build1
+E: Unable to locate package amd64
+```
 
 Проверяем, что ngnix запущен:
 ```
