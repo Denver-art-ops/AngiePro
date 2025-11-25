@@ -43,6 +43,32 @@ Nov 25 17:57:41 compute-vm-angie01 systemd[1]: Starting nginx.service - A high p
 Nov 25 17:57:41 compute-vm-angie01 systemd[1]: Started nginx.service - A high performance web server and a reverse proxy server.
 ```
 
+Копируем конфигурацию ngnix.conf с лабы (по SFTP) и применяем ее для нашего сервера:
+```
+zubahin@compute-vm-angie01:~$ ls -la /home/zubahin
+total 72
+drwxr-x--- 4 zubahin zubahin  4096 Nov 25 18:46 .
+drwxr-xr-x 3 root    root     4096 Nov 25 14:57 ..
+-rw------- 1 zubahin zubahin    20 Nov 25 18:44 .bash_history
+-rw-r--r-- 1 zubahin zubahin   220 Mar 31  2024 .bash_logout
+-rw-r--r-- 1 zubahin zubahin  3771 Mar 31  2024 .bashrc
+drwx------ 2 zubahin zubahin  4096 Nov 25 15:05 .cache
+-rw-r--r-- 1 zubahin zubahin   807 Mar 31  2024 .profile
+drwx------ 2 zubahin zubahin  4096 Nov 25 14:57 .ssh
+-rw-rw-rw- 1 zubahin zubahin 40960 Nov 25 18:46 nginx_conf.tar-252831-0242cd
+```
+Копируем содержимое в файл /etc/nginx/nginx.conf:
+```
+zubahin@compute-vm-angie01:~$ cp -i /home/zubahin/nginx_conf.tar-252831-0242cd /etc/nginx/nginx.conf
+cp: unwritable '/etc/nginx/nginx.conf' (mode 0644, rw-r--r--); try anyway? 
+zubahin@compute-vm-angie01:~$ 
+zubahin@compute-vm-angie01:~$ 
+zubahin@compute-vm-angie01:~$ sudo cp -i /home/zubahin/nginx_conf.tar-252831-0242cd /etc/nginx/nginx.conf
+cp: overwrite '/etc/nginx/nginx.conf'? y
+```
+
+
+
 #### Шаг 3: Подключились к консоли и выполнили все рекомендации по установке angie:
 
 Скачайте открытый ключ репозитория Angie для проверки подлинности пакетов: 
