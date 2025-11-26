@@ -679,6 +679,7 @@ angie: configuration file /etc/angie/angie.conf test is successful
  sudo angie -T
 ```
 <details> 
+     
 ```
 zubahin@compute-vm-angie01:~$ sudo angie -T
 angie: the configuration file /etc/angie/angie.conf syntax is ok
@@ -939,7 +940,6 @@ server {
         #}
 }
 
-
 # Virtual Host configuration for example.com
 #
 # You can move that to a different file under sites-available/ and symlink that
@@ -959,8 +959,56 @@ server {
 #       }
 #}
 ```
-
 </details>
 
+###  Выключем nginx и одновременно запускаем Angie:
+```
+sudo systemctl stop nginx && sudo systemctl start angie
+```
+###  Включаем автозагрузку angie (и отключаем ее для nginx):
 
+```
+sudo systemctl disable nginx && sudo systemctl enable angie
+```
+```
+zubahin@compute-vm-angie01:~$ sudo systemctl disable nginx && sudo systemctl enable angie
+Synchronizing state of nginx.service with SysV service script with /usr/lib/systemd/systemd-sysv-install.
+Executing: /usr/lib/systemd/systemd-sysv-install disable nginx
+Removed "/etc/systemd/system/multi-user.target.wants/nginx.service".
+Synchronizing state of angie.service with SysV service script with /usr/lib/systemd/systemd-sysv-install.
+Executing: /usr/lib/systemd/systemd-sysv-install enable angie
+```
+
+### Финальные проверки:
+```
+zubahin@compute-vm-angie01:~$ grep -rn '/nginx' /etc/angie
+/etc/angie/http.d/default.conf:16:# Please see /usr/share/doc/nginx-doc/examples/ for more detailed examples.
+/etc/angie/http.d/default.bak:16:# Please see /usr/share/doc/nginx-doc/examples/ for more detailed examples.
+zubahin@compute-vm-angie01:~$ curl 127.0.0.1/info.php
+<html>
+<head><title>404 Not Found</title></head>
+<body>
+<center><h1>404 Not Found</h1></center>
+<hr><center>Angie/1.10.3</center>
+</body>
+</html>
+zubahin@compute-vm-angie01:~$
+```
+
+### Подстрахуемся от ручного случайного запуска nginx:
+```
+sudo systemctl mask nginx
+```
+```
+zubahin@compute-vm-angie01:~$ sudo systemctl mask nginx
+Created symlink /etc/systemd/system/nginx.service → /dev/null.
+
+zubahin@compute-vm-angie01:~$ sudo systemctl start nginx
+Failed to start nginx.service: Unit nginx.service is masked.
+```
+
+Снять маску с сервиса можно командой:
+```
+sudo systemctl unmask nginx
+```
 
