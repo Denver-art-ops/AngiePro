@@ -641,8 +641,326 @@ No VM guests are running outdated hypervisor (qemu) binaries on this host.
 
 ### На всякий случай проверим, какие порты слушает nginx (вдруг есть что-то экзотическое):
 ```
-
+zubahin@compute-vm-angie01:~$ sudo ss -tlnp | grep nginx
+LISTEN 0      511          0.0.0.0:80        0.0.0.0:*    users:(("nginx",pid=7264,fd=5),("nginx",pid=7263,fd=5),("nginx",pid=7262,fd=5))
+LISTEN 0      511             [::]:80           [::]:*    users:(("nginx",pid=7264,fd=6),("nginx",pid=7263,fd=6),("nginx",pid=7262,fd=6))
 ```
 ### Начинаем перенос конфигурации в файл angie.conf
+Для начала переносим в конфигурацию angie руками все блоки, что отличаются.
+В том числе включаем модули Brotli:
+```
+load_module modules/ngx_http_brotli_filter_module.so;
+load_module modules/ngx_http_brotli_static_module.so;
+```
+Что касается строки в конфигурации nginx:
+```
+include /etc/nginx/sites-enabled/*;
+```
+То просто копируем файлы в директорию http.d в angie (так как в sites-enebled описан блок server:
+```
+cp /etc/nginx/sites-available/default  /etc/angie/http.d
+```
+
+Переносим конфигурацию из файла http.d/default в default.bak и default.conf 
+```
+zubahin@compute-vm-angie01:~$ sudo cp /etc/angie/http.d/default /etc/angie/http.d/default.bak
+zubahin@compute-vm-angie01:~$ sudo cp /etc/angie/http.d/default /etc/angie/http.d/default.conf
+zubahin@compute-vm-angie01:~$ sudo rm /etc/angie/http.d/default
+```
+
+### Проверяем работоспособрость angie:
+```
+zubahin@compute-vm-angie01:~$ sudo angie -t
+angie: the configuration file /etc/angie/angie.conf syntax is ok
+angie: configuration file /etc/angie/angie.conf test is successful
+```
+Проверяем конфигурацию (что ее перенесли корректно):
+```
+ sudo angie -T
+```
+<details> 
+```
+zubahin@compute-vm-angie01:~$ sudo angie -T
+angie: the configuration file /etc/angie/angie.conf syntax is ok
+angie: configuration file /etc/angie/angie.conf test is successful
+# configuration file /etc/angie/angie.conf:
+user  angie;
+worker_processes  auto;
+worker_rlimit_nofile 65536;
+
+pid        /run/angie.pid;
+
+load_module modules/ngx_http_brotli_filter_module.so;
+load_module modules/ngx_http_brotli_static_module.so;
+
+events {
+    worker_connections 65536;
+}
+
+http {
+    include       /etc/angie/mime.types;
+    default_type  application/octet-stream;
+    #LOG settings
+    log_format  main  '$remote_addr - $remote_user [$time_local] "$request" '
+                      '$status $body_bytes_sent "$http_referer" '
+                      '"$http_user_agent" "$http_x_forwarded_for"';
+
+    log_format extended '$remote_addr - $remote_user [$time_local] "$request" '
+                        '$status $body_bytes_sent "$http_referer" rt="$request_time" '
+                        '"$http_user_agent" "$http_x_forwarded_for" '
+                        'h="$host" sn="$server_name" ru="$request_uri" u="$uri" '
+                        'ucs="$upstream_cache_status" ua="$upstream_addr" us="$upstream_status" '
+                        'uct="$upstream_connect_time" urt="$upstream_response_time"';
+
+    access_log  /var/log/angie/access.log  extended;
+    error_log /var/log/angie/error.log notice;
+    sendfile        on;
+    tcp_nopush     on;
+    types_hash_max_size 2048;
+    keepalive_timeout  65;
+
+    proxy_cache_valid 1m;
+    proxy_cache_key $scheme$host$request_uri;
+    proxy_cache_path /var/www/cache levels=1:2 keys_zone=one:10m inactive=48h max_size=800m;
+#GZIP Settings
+    gzip  on;
+    gzip_vary on;
+    gzip_proxied any;
+    gzip_comp_level 6;
+    gzip_buffers 16 8k;
+    gzip_http_version 1.1;
+    gzip_types text/plain text/css application/json application/javascript text/xml application/xml application/xml+rss text/javascript;
+
+
+# SSL Settings
+   #         ##
+   #
+   ssl_protocols TLSv1 TLSv1.1 TLSv1.2 TLSv1.3; # Dropping SSLv3, ref: POODLE
+   ssl_prefer_server_ciphers on;
+   #
+   # MAPs
+   map $http_accept $webp_suffix {
+        "~*webp"  ".webp";
+    }
+
+    map $http_accept $avif_suffix {
+        "~*avif"  ".avif";
+        "~*webp"  ".webp";
+    }
+
+    map $msie $cache_control {
+      default "max-age=31536000, public, no-transform, immutable";
+        "1"     "max-age=31536000, private, no-transform, immutable";
+    }
+
+    map $msie $vary_header {
+        default "Accept";
+        "1"     "";
+    }
+    include /etc/angie/http.d/*.conf;
+}
+
+#stream {
+#    include /etc/angie/stream.d/*.conf;
+#}
+#
+
+# configuration file /etc/angie/mime.types:
+
+types {
+    text/html                                        html htm shtml;
+    text/css                                         css;
+    text/xml                                         xml;
+    image/gif                                        gif;
+    image/jpeg                                       jpeg jpg;
+    application/javascript                           js;
+    application/atom+xml                             atom;
+    application/rss+xml                              rss;
+
+    text/mathml                                      mml;
+    text/plain                                       txt;
+    text/vnd.sun.j2me.app-descriptor                 jad;
+    text/vnd.wap.wml                                 wml;
+    text/x-component                                 htc;
+
+    image/avif                                       avif;
+    image/bmp                                        bmp;
+    image/png                                        png;
+    image/svg+xml                                    svg svgz;
+    image/tiff                                       tif tiff;
+    image/vnd.wap.wbmp                               wbmp;
+    image/webp                                       webp;
+    image/x-icon                                     ico;
+    image/x-jng                                      jng;
+
+    font/woff                                        woff;
+    font/woff2                                       woff2;
+
+    application/java-archive                         jar war ear;
+    application/json                                 json;
+    application/mac-binhex40                         hqx;
+    application/msword                               doc;
+    application/pdf                                  pdf;
+    application/postscript                           ps eps ai;
+    application/rtf                                  rtf;
+    application/vnd.apple.mpegurl                    m3u8;
+    application/vnd.debian.binary-package            deb udeb;
+    application/vnd.google-earth.kml+xml             kml;
+    application/vnd.google-earth.kmz                 kmz;
+    application/vnd.ms-excel                         xls;
+    application/vnd.ms-fontobject                    eot;
+    application/vnd.ms-powerpoint                    ppt;
+    application/vnd.oasis.opendocument.graphics      odg;
+    application/vnd.oasis.opendocument.presentation  odp;
+    application/vnd.oasis.opendocument.spreadsheet   ods;
+    application/vnd.oasis.opendocument.text          odt;
+    application/vnd.openxmlformats-officedocument.presentationml.presentation
+                                                     pptx;
+    application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
+                                                     xlsx;
+    application/vnd.openxmlformats-officedocument.wordprocessingml.document
+                                                     docx;
+    application/vnd.rar                              rar;
+    application/vnd.wap.wmlc                         wmlc;
+    application/wasm                                 wasm;
+    application/x-7z-compressed                      7z;
+    application/x-cocoa                              cco;
+    application/x-java-archive-diff                  jardiff;
+    application/x-java-jnlp-file                     jnlp;
+    application/x-makeself                           run;
+    application/x-perl                               pl pm;
+    application/x-pilot                              prc pdb;
+    application/x-redhat-package-manager             rpm;
+    application/x-sea                                sea;
+    application/x-shockwave-flash                    swf;
+    application/x-stuffit                            sit;
+    application/x-tcl                                tcl tk;
+    application/x-x509-ca-cert                       der pem crt;
+    application/x-xpinstall                          xpi;
+    application/xhtml+xml                            xhtml;
+    application/xspf+xml                             xspf;
+    application/zip                                  zip;
+
+    application/octet-stream                         bin exe dll;
+    application/octet-stream                         dmg;
+    application/octet-stream                         iso img;
+    application/octet-stream                         msi msp msm;
+
+    audio/midi                                       mid midi kar;
+    audio/mpeg                                       mp3;
+    audio/ogg                                        ogg;
+    audio/x-m4a                                      m4a;
+    audio/x-realaudio                                ra;
+
+    video/3gpp                                       3gpp 3gp;
+    video/mp2t                                       ts;
+    video/mp4                                        mp4;
+    video/mpeg                                       mpeg mpg;
+    video/quicktime                                  mov;
+    video/webm                                       webm;
+    video/x-flv                                      flv;
+    video/x-m4v                                      m4v;
+    video/x-mng                                      mng;
+    video/x-ms-asf                                   asx asf;
+    video/x-ms-wmv                                   wmv;
+    video/x-msvideo                                  avi;
+}
+
+# configuration file /etc/angie/http.d/default.conf:
+##
+# You should look at the following URL's in order to grasp a solid understanding
+# of Nginx configuration files in order to fully unleash the power of Nginx.
+# https://www.nginx.com/resources/wiki/start/
+# https://www.nginx.com/resources/wiki/start/topics/tutorials/config_pitfalls/
+# https://wiki.debian.org/Nginx/DirectoryStructure
+#
+# In most cases, administrators will remove this file from sites-enabled/ and
+# leave it as reference inside of sites-available where it will continue to be
+# updated by the nginx packaging team.
+#
+# This file will automatically load configuration files provided by other
+# applications, such as Drupal or Wordpress. These applications will be made
+# available underneath a path with that package name, such as /drupal8.
+#
+# Please see /usr/share/doc/nginx-doc/examples/ for more detailed examples.
+##
+
+# Default server configuration
+#
+server {
+        listen 80 default_server;
+        listen [::]:80 default_server;
+
+        # SSL configuration
+        #
+        # listen 443 ssl default_server;
+        # listen [::]:443 ssl default_server;
+        #
+        # Note: You should disable gzip for SSL traffic.
+        # See: https://bugs.debian.org/773332
+        #
+        # Read up on ssl_ciphers to ensure a secure configuration.
+        # See: https://bugs.debian.org/765782
+        #
+        # Self signed certs generated by the ssl-cert package
+        # Don't use them in a production server!
+        #
+        # include snippets/snakeoil.conf;
+
+        root /var/www/html;
+
+        # Add index.php to the list if you are using PHP
+        index index.html index.htm index.nginx-debian.html;
+
+        server_name _;
+
+        location / {
+                # First attempt to serve request as file, then
+                # as directory, then fall back to displaying a 404.
+                try_files $uri $uri/ =404;
+        }
+
+        # pass PHP scripts to FastCGI server
+        #
+        #location ~ \.php$ {
+        #       include snippets/fastcgi-php.conf;
+        #
+        #       # With php-fpm (or other unix sockets):
+        #       fastcgi_pass unix:/run/php/php7.4-fpm.sock;
+        #       # With php-cgi (or other tcp sockets):
+        #       fastcgi_pass 127.0.0.1:9000;
+        #}
+
+        # deny access to .htaccess files, if Apache's document root
+        # concurs with nginx's one
+        #
+        #location ~ /\.ht {
+        #       deny all;
+        #}
+}
+
+
+# Virtual Host configuration for example.com
+#
+# You can move that to a different file under sites-available/ and symlink that
+# to sites-enabled/ to enable it.
+#
+#server {
+#       listen 80;
+#       listen [::]:80;
+#
+#       server_name example.com;
+#
+#       root /var/www/example.com;
+#       index index.html;
+#
+#       location / {
+#               try_files $uri $uri/ =404;
+#       }
+#}
+```
+
+</details>
+
 
 
