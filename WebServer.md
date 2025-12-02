@@ -973,3 +973,31 @@ print 'It took ' + i + ' iterations to sort the deck.';</code></pre>
 ```
 </details>
 
+Обратимся к example.com
+zubahin@compute-vm-angie01:~$ sudo curl -i http://example.com
+
+```
+zubahin@compute-vm-angie01:~$ sudo curl -i http://example.com
+HTTP/1.1 200 OK
+Server: Angie/1.10.3
+Date: Tue, 02 Dec 2025 09:33:40 GMT
+Content-Type: application/octet-stream
+Content-Length: 20
+Connection: keep-alive
+X-Custom-Header: User-agent is from a trusted IP-Thats I am
+
+Custom header added
+```
+
+Обратимся к www.test.com
+```
+zubahin@compute-vm-angie01:~$ sudo curl -i http://www.test.com
+HTTP/1.1 400 Bad Request
+Server: Angie/1.10.3
+Date: Tue, 02 Dec 2025 09:34:35 GMT
+Content-Type: application/octet-stream
+Content-Length: 11
+Connection: keep-alive
+
+Bad Requestzubahin@compute-vm-angie01:~$
+```
