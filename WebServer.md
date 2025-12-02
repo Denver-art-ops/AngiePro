@@ -477,5 +477,104 @@ print 'It took ' + i + ' iterations to sort the deck.';</code></pre>
 
 
 
-### Задание: Запустите приложенный из дополнительных материалов к занятию на сервере.
-### Для каждой директории создайте location со своими настройками. Отдельно создайте location c регулярным выражением для отдачи картинок jpg, jpeg, png, gif.
+### Задание: Задействуйте переменные, определённые с map для работы с location.
+### Настройте два вида перенаправлений (301/302 и внутренние).
+
+#### Шаг 4.  Для начала внесем изменения в файл hosts на локальном сервере:
+Добавим записи для example.com, www.test.com  и test.com
+
+```
+# Your system has configured 'manage_etc_hosts' as True.
+# As a result, if you wish for changes to this file to persist
+# then you will need to either
+# a.) make changes to the master file in /etc/cloud/templates/hosts.debian.tmpl
+# b.) change or remove the value of 'manage_etc_hosts' in
+#     /etc/cloud/cloud.cfg or cloud-config from user-data
+#
+127.0.1.1 compute-vm-angie01.ru-central1.internal compute-vm-angie01
+127.0.0.1 localhost
+127.0.0.1 example.com
+127.0.0.1 test.com
+127.0.0.1 www.test.com
+# The following lines are desirable for IPv6 capable hosts
+::1 localhost ip6-localhost ip6-loopback
+ff02::1 ip6-allnodes
+ff02::2 ip6-allrouters
+```
+
+#### Шаг 5.  Добавляем настройки в angie.conf:
+
+<details>
+```
+user  angie;
+worker_processes  auto;
+worker_rlimit_nofile 65536;
+
+error_log  /var/log/angie/error.log notice;
+pid        /run/angie.pid;
+
+events {
+    worker_connections  65536;
+}
+
+
+http {
+    include       /etc/angie/mime.types;
+    default_type  application/octet-stream;
+
+    log_format  main  '$remote_addr - $remote_user [$time_local] "$request" '
+                      '$status $body_bytes_sent "$http_referer" '
+                      '"$http_user_agent" "$http_x_forwarded_for"';
+
+    log_format extended '$remote_addr - $remote_user [$time_local] "$request" '
+                        '$status $body_bytes_sent "$http_referer" rt="$request_time" '
+                        '"$http_user_agent" "$http_x_forwarded_for" '
+                        'h="$host" sn="$server_name" ru="$request_uri" u="$uri" '
+                        'ucs="$upstream_cache_status" ua="$upstream_addr" us="$upstream_status" '
+                        'uct="$upstream_connect_time" urt="$upstream_response_time"';
+
+    access_log  /var/log/angie/access.log  main;
+
+    sendfile        on;
+    #tcp_nopush     on;
+        keepalive_timeout  65;
+
+    #gzip  on;
+
+    include /etc/angie/http.d/*.conf;
+
+map $remote_addr $user_agent_header {
+    default "No user agent info - Untrusted IP";
+    127.0.0.1 "User-agent is from a trusted IP-Thats I am";
+}
+server {
+    listen 80;
+    server_name example.com;
+    add_header X-Custom-Header $user_agent_header always;
+
+    location / {
+        return 200 "Custom header added\n";
+  }
+}
+
+server {
+    listen 80;
+    server_name test.com;
+    return 301 $scheme://localhost$request_uri;
+location /site {
+        alias /usr/share/angie/html/site/static_site/;
+        index  index.html index.htm;
+    }
+     }
+server {
+    listen 80;
+    server_name www.test.com;
+    return 400 "Bad Request";
+  }
+}
+#stream {
+#    include /etc/angie/stream.d/*.conf;
+#} 
+
+```
+</details>
