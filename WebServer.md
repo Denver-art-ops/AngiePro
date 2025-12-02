@@ -90,7 +90,7 @@ location /assets/sass {
 ```
 ### Проверяем, что получилось:
 
-Обращение к сайту:
+1) Обращение к сайту:
 zubahin@compute-vm-angie01:~$ sudo curl http://127.0.0.1/site
 
 <details>
@@ -467,10 +467,13 @@ print 'It took ' + i + ' iterations to sort the deck.';</code></pre>
 ```
 </details>
 
-Попробуем сходить в какую-нибудь папку:
+2) Попробуем сходить в какую-нибудь папку:
 ![Test01.png](Test01.png)
 
-
+3) А теперь обращения к картинкам:
+![Test02.png](Test02.png)
+![Test02.png](Test02.png)
+   
 
 
 
