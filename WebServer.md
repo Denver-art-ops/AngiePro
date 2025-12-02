@@ -1,4 +1,4 @@
-### Миграция с NGINX на Angie
+### Подготовительные шаги:
 
 #### Шаг 1:
 Создали ВМ в облаке.
@@ -6,6 +6,8 @@
 #### Шаг 2: Копируем файлы из ДЗ по SFTP в директорию:
 
 /usr/share/angie/html/site/static_site/
+### Задание: Запустите приложенный из дополнительных материалов к занятию на сервере.
+### Для каждой директории создайте location со своими настройками. Отдельно создайте location c регулярным выражением для отдачи картинок jpg, jpeg, png, gif.
 
 #### Шаг 3: Правим конфигурацию:
 
@@ -28,12 +30,30 @@ server {
         deny    all;
     }
 
-     location /site/ {
+         location /site/ {
         alias /usr/share/angie/html/site/static_site/;
         index  index.html index.htm;
-
    }
-      location ~*\.(gif|jpg|jpeg|jiff)$ {
+     location /error/ {
+        alias /usr/share/angie/html/site/static_site/error;
+        index  index.html index.htm;
+   }
+     location /images/ {
+        alias /usr/share/angie/html/site/static_site/images;
+   }
+     location /assets/css {
+        alias /usr/share/angie/html/site/static_site/assets/css;
+   }
+     location /assets/fonts {
+        alias /usr/share/angie/html/site/static_site/assets/fonts;
+   }
+     location /assets/js {
+        alias /usr/share/angie/html/site/static_site/assets/js;
+   }
+location /assets/sass {
+        alias /usr/share/angie/html/site/static_site/assets/sass;
+   }
+     location ~*\.(gif|jpg|jpeg|jiff)$ {
     root /usr/share/angie/html/site/static_site/images/;
     }
 #error_page  404              /404.html;
@@ -68,3 +88,11 @@ server {
     #}
 }
 ```
+### Проверяем, что получилось:
+
+
+
+
+
+### Задание: Запустите приложенный из дополнительных материалов к занятию на сервере.
+### Для каждой директории создайте location со своими настройками. Отдельно создайте location c регулярным выражением для отдачи картинок jpg, jpeg, png, gif.
