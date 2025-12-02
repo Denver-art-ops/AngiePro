@@ -481,7 +481,7 @@ print 'It took ' + i + ' iterations to sort the deck.';</code></pre>
 ### Настройте два вида перенаправлений (301/302 и внутренние).
 
 #### Шаг 4.  Для начала внесем изменения в файл hosts на локальном сервере:
-Добавим записи для example.com, www.test.com  и test.com
+Добавим записи для example.com, www.test.com. mysite  и test.com
 
 ```
 # Your system has configured 'manage_etc_hosts' as True.
@@ -496,6 +496,7 @@ print 'It took ' + i + ' iterations to sort the deck.';</code></pre>
 127.0.0.1 example.com
 127.0.0.1 test.com
 127.0.0.1 www.test.com
+127.0.0.1 mysite.com
 # The following lines are desirable for IPv6 capable hosts
 ::1 localhost ip6-localhost ip6-loopback
 ff02::1 ip6-allnodes
