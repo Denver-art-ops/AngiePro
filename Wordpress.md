@@ -229,11 +229,17 @@ CONTAINER ID   IMAGE                                COMMAND                  CRE
 
 ![WordPress03.png](WordPress03.png)
 
-![WordPress04.png](WordPress04.png)
+#### Шаг 7: Настраиваем конфигурационный файл Angie (Приложен)
 
-![WordPress05.png](WordPress05.png)
+![angie.conf](angie.conf.conf)
+
+
+
+#### Шаг 8: Смотрим статический контент:
+
+![WordPress04.png](WordPress04.png)
 
 ![WordPress06.png](WordPress06.png)
 
-![WordPress07.png](WordPres07.png)
+![WordPress07.png](WordPress07.png)
 
