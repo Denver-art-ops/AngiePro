@@ -221,7 +221,7 @@ CONTAINER ID   IMAGE                                COMMAND                  CRE
 
 Настраиваем имя пользователя, пароль (запоминаем), имя сайта и прочее:
 
-![WordPress.png](WordPres.png)
+![WordPress.png] (WordPres.png)
 
 ![WordPress01.png](WordPres01.png)
 
