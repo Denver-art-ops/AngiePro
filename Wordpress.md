@@ -219,3 +219,21 @@ CONTAINER ID   IMAGE                                COMMAND                  CRE
 
 #### Шаг 6: Заходим в настройку WordPress по адресу: HTTP://адрес сервера:80 
 
+Настраиваем имя пользователя, пароль (запоминаем), имя сайта и прочее:
+
+![WorldPress.png](WorldPres.png)
+
+![WorldPress01.png](WorldPres01.png)
+
+![WorldPress02.png](WorldPres02.png)
+
+![WorldPress03.png](WorldPres03.png)
+
+![WorldPress04.png](WorldPres04.png)
+
+![WorldPress05.png](WorldPres05.png)
+
+![WorldPress06.png](WorldPres06.png)
+
+![WorldPress07.png](WorldPres07.png)
+
