@@ -221,19 +221,19 @@ CONTAINER ID   IMAGE                                COMMAND                  CRE
 
 Настраиваем имя пользователя, пароль (запоминаем), имя сайта и прочее:
 
-![WorldPress.png](WorldPres.png)
+![WordPress.png](WordPres.png)
 
-![WorldPress01.png](WorldPres01.png)
+![WordPress01.png](WordPres01.png)
 
-![WorldPress02.png](WorldPres02.png)
+![WordPress02.png](WordPres02.png)
 
-![WorldPress03.png](WorldPres03.png)
+![WordPress03.png](WordPres03.png)
 
-![WorldPress04.png](WorldPres04.png)
+![WordPress04.png](WordPres04.png)
 
-![WorldPress05.png](WorldPres05.png)
+![WordPress05.png](WordPres05.png)
 
-![WorldPress06.png](WorldPres06.png)
+![WordPress06.png](WordPres06.png)
 
-![WorldPress07.png](WorldPres07.png)
+![WordPress07.png](WordPres07.png)
 
