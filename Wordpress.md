@@ -47,6 +47,9 @@ sudo apt update
 .env
 docker-compose.yml
 
+здесь же создадим папку angie-conf и скопируем файл angie.conf в нее - на нее будет ориентироваться контейнер в докере
+
+
 ```
 zubahin@compute-vm-angie01:~/project$ ls -la
 total 36
@@ -233,7 +236,60 @@ CONTAINER ID   IMAGE                                COMMAND                  CRE
 
 [angie.conf](angie.conf.conf)
 
+Ниже приложена конфигурация:
 
+```
+server {
+        listen 80;
+        listen [::]:80;
+
+        server_name example.com www.example.com;
+
+        index index.php index.html index.htm;
+
+        root /var/www/html;
+
+        location ~ /.well-known/acme-challenge {
+                allow all;
+                root /var/www/html;
+        }
+
+        location / {
+                try_files $uri $uri/ /index.php$is_args$args;
+        }
+
+        location ~ \.php$ {
+                try_files $uri =404;
+                fastcgi_split_path_info ^(.+\.php)(/.+)$;
+                fastcgi_pass wordpress:9000;
+                fastcgi_index index.php;
+                include fastcgi_params;
+                fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+                fastcgi_param PATH_INFO $fastcgi_path_info;
+        }
+
+        location ~ /\.ht {
+                deny all;
+        }
+
+        location = /favicon.ico {
+                log_not_found off; access_log off;
+        }
+        location = /robots.txt {
+                log_not_found off; access_log off; allow all;
+        }
+        location ~* \.(css|gif|ico|jpeg|jpg|js|png)$ {
+                expires max;
+                log_not_found off;
+        }
+}
+
+```
+файл храним в папке проекта (на нее ссылается volumes в YAML файле:
+
+```
+/home/zubahin/project/angie-conf
+```
 
 #### Шаг 8: Смотрим статический контент:
 
