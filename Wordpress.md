@@ -231,7 +231,7 @@ CONTAINER ID   IMAGE                                COMMAND                  CRE
 
 #### Шаг 7: Настраиваем конфигурационный файл Angie (Приложен)
 
-![angie.conf](angie.conf.conf)
+[angie.conf](angie.conf.conf)
 
 
 
