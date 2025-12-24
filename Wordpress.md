@@ -10,7 +10,7 @@ sudo apt install docker.io
 ```
 Добавим своего пользователя в группу docker чтобы можно было запускать команды без sudo:
 ```
-usermod -aG docker  zubahin
+sudo usermod -aG docker  zubahin
 ```
 
 Далее можно бы было ставить каждый контейнер вручную.  Например angie:
