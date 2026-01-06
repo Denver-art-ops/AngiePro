@@ -127,7 +127,7 @@ e850726d3268   project_app-network   bridge    local
 zubahin@compute-vm-angie01:~/angie$ vim angie.conf
 ```
 
-<angie.conf>
+<details>
     
 ```
  package: angie-module-auth-jwt
@@ -342,7 +342,7 @@ default "Accept";
 
 ```
 
-</angie.conf>
+</details>
 
 
 #####  файл с настройками модуля server в http.d:
