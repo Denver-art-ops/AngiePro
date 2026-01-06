@@ -82,6 +82,44 @@ networks:
 
 </details>
 
+ключевыми настройками здесь является проброс портов 80:80  мапирование директории для конфигураций контейнера angie в файлах хостовой системы (home/zubahin/angie) и создание сети ( bridge) 
+с названием app-network  чтобы контейнеры видели друг-друга:
+
+```
+    ports:
+      - "80:80"
+    volumes:
+      - wordpress:/var/www/html
+      - /home/zubahin/angie:/etc/angie:ro
+    networks:
+      - app-network
+```
+
+Запускаем docker-compose:
+
+```
+docker-compose up -d
+```
+
+Проверяем состояние контейнеров и сети:
+
+```
+zubahin@compute-vm-angie01:~/project$ docker ps -a
+CONTAINER ID   IMAGE                                       COMMAND                  CREATED        STATUS         PORTS                                 NAMES
+b8516624afcb   docker.angie.software/angie:1.10.3-ubuntu   "angie -g 'daemon of…"   30 hours ago   Up 9 minutes   0.0.0.0:80->80/tcp, [::]:80->80/tcp   angie
+1037e688e707   wordpress:6.0.1-php8.0-fpm-alpine           "docker-entrypoint.s…"   30 hours ago   Up 9 minutes   9000/tcp                              wordpress
+f524c6d07282   mysql:8.0                                   "docker-entrypoint.s…"   30 hours ago   Up 9 minutes   3306/tcp, 33060/tcp                   db
+
+zubahin@compute-vm-angie01:~/project$ docker network ls
+NETWORK ID     NAME                  DRIVER    SCOPE
+6b3b65f6e386   bridge                bridge    local
+bacb1e0938f0   host                  host      local
+21964b12fec6   none                  null      local
+e850726d3268   project_app-network   bridge    local
+
+```
+
+
 #### Шаг 2: Копируем файлы из ДЗ по SFTP в директорию:
 
 /usr/share/angie/html/site/static_site/
