@@ -2,7 +2,85 @@
 ### Подготовительные шаги:
 
 #### Шаг 1:
-Используем заготовки из предыдущего задания (сайт с worldpress и Proxy)
+Используем Docker-compose и набор файлов (.env dockerignore docker-compose.yaml) в директорию project:
+
+
+```
+zubahin@compute-vm-angie01:~$ cd project
+zubahin@compute-vm-angie01:~/project$ ls -la
+total 24
+drwxrwxr-x 2 zubahin zubahin 4096 Jan  5 11:18 .
+drwxr-x--- 6 zubahin zubahin 4096 Jan  5 11:32 ..
+-rw-rw-rw- 1 zubahin zubahin    5 Dec 26 07:38 .dockerignore
+-rw-rw-rw- 1 zubahin zubahin   83 Dec 26 07:38 .env
+-rw-rw-rw- 1 zubahin zubahin 1193 Dec 26 08:47 angie.conf
+-rw-rw-rw- 1 zubahin zubahin 1106 Jan  5 11:18 docker-compose.yml
+```
+
+Файл приложены к материалам.
+Ниже продублировано содержание docker-compose.yaml:
+
+<details>
+    
+```
+version: '3'
+
+services:
+  db:
+    image: mysql:8.0
+    container_name: db
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      - MYSQL_DATABASE=wordpress
+    volumes:
+      - dbdata:/var/lib/mysql
+    command: '--default-authentication-plugin=mysql_native_password'
+    networks:
+      - app-network
+
+  wordpress:
+    depends_on:
+      - db
+    image: wordpress:6.0.1-php8.0-fpm-alpine
+    container_name: wordpress
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      - WORDPRESS_DB_HOST=db:3306
+      - WORDPRESS_DB_USER=$MYSQL_USER
+      - WORDPRESS_DB_PASSWORD=$MYSQL_PASSWORD
+      - WORDPRESS_DB_NAME=wordpress
+    volumes:
+      - wordpress:/var/www/html
+    networks:
+      - app-network
+
+  angie:
+   depends_on:
+      - wordpress
+    image: docker.angie.software/angie:1.10.3-ubuntu
+    container_name: angie
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    volumes:
+      - wordpress:/var/www/html
+      - /home/zubahin/angie:/etc/angie:ro
+    networks:
+      - app-network
+volumes:
+  wordpress:
+  dbdata:
+
+networks:
+  app-network:
+    driver: bridge
+
+
+```
+
+</details>
 
 #### Шаг 2: Копируем файлы из ДЗ по SFTP в директорию:
 
