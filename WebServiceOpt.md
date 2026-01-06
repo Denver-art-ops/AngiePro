@@ -120,7 +120,235 @@ e850726d3268   project_app-network   bridge    local
 ```
 
 
-#### Шаг 2: Копируем файлы из ДЗ по SFTP в директорию:
+#### Шаг 2: Вносим изменения в конфигурационные файлы.
+
+#####  корневой файл angie.conf:
+```
+zubahin@compute-vm-angie01:~/angie$ vim angie.conf
+```
+
+<details>
+    
+```
+ package: angie-module-auth-jwt
+#load_module modules/ngx_http_auth_jwt_module.so;
+
+# package: angie-module-auth-ldap
+#load_module modules/ngx_http_auth_ldap_module.so;
+
+# package: angie-module-auth-pam
+#load_module modules/ngx_http_auth_pam_module.so;
+
+# package: angie-module-auth-spnego
+#load_module modules/ngx_http_auth_spnego_module.so;
+
+# package: angie-module-auth-totp
+#load_module modules/ngx_http_auth_totp_module.so;
+
+# package: angie-module-brotli
+#load_module modules/ngx_http_brotli_filter_module.so;
+#load_module modules/ngx_http_brotli_static_module.so;
+
+# package: angie-module-cache-purge
+#load_module modules/ngx_http_cache_purge_module.so;
+
+# package: angie-module-cgi
+#load_module modules/ngx_http_cgi_module.so;
+
+# package: angie-module-combined-upstreams
+#load_module modules/ngx_http_combined_upstreams_module.so;
+
+# package: angie-module-dav-ext
+#load_module modules/ngx_http_dav_ext_module.so;
+
+# package: angie-module-dynamic-limit-req
+#load_module modules/ngx_http_dynamic_limit_req_module.so;
+
+# package: angie-module-echo
+#load_module modules/ngx_http_echo_module.so;
+
+# package: angie-module-enhanced-memcached
+#load_module modules/ngx_http_enhanced_memcached_module.so;
+
+# package: angie-module-eval
+#load_module modules/ngx_http_eval_module.so;
+
+# package: angie-module-geoip2
+#load_module modules/ngx_http_geoip2_module.so;
+#load_module modules/ngx_stream_geoip2_module.so;
+
+# package: angie-module-headers-more
+#load_module modules/ngx_http_headers_more_filter_module.so;
+
+# package: angie-module-http-auth-radius
+# uncommenting line below make sure you have configured 'radius_server'
+#load_module modules/ngx_http_auth_radius_module.so;
+
+# package: angie-module-image-filter
+#load_module modules/ngx_http_image_filter_module.so;
+
+# package: angie-module-keyval
+#load_module modules/ngx_http_keyval_module.so;
+#load_module modules/ngx_stream_keyval_module.so;
+
+# package: angie-module-ndk
+#load_module modules/ndk_http_module.so;
+
+# package: angie-module-lua
+#load_module modules/ngx_http_lua_module.so;
+#load_module modules/ngx_stream_lua_module.so;
+
+ package: angie-module-modsecurity
+#load_module modules/ngx_http_modsecurity_module.so;
+
+# package: angie-module-njs
+#load_module modules/ngx_http_js_module.so;
+#load_module modules/ngx_stream_js_module.so;
+
+# package: angie-module-opentracing
+#load_module modules/ngx_http_opentracing_module.so;
+
+# package: angie-module-otel
+#load_module modules/ngx_otel_module.so;
+
+# package: angie-module-perl
+#load_module modules/ngx_http_perl_module.so;
+
+# package: angie-module-postgres
+#load_module modules/ngx_postgres_module.so;
+
+# package: angie-module-redis2
+#load_module modules/ngx_http_redis2_module.so;
+
+# package: angie-module-rtmp
+#load_module modules/ngx_rtmp_module.so;
+
+# package: angie-module-set-misc
+#load_module modules/ngx_http_set_misc_module.so;
+
+# package: angie-module-subs
+#load_module modules/ngx_http_subs_filter_module.so;
+
+# package: angie-module-testcookie
+#load_module modules/ngx_http_testcookie_access_module.so;
+
+# package: angie-module-unbrotli
+# load_module modules/ngx_http_unbrotli_filter_module.so;
+
+# package: angie-module-upload
+#load_module modules/ngx_http_upload_module.so;
+
+# package: angie-module-vod
+#load_module modules/ngx_http_vod_module.so;
+
+# package: angie-module-vts
+#load_module modules/ngx_http_stream_server_traffic_status_module.so;
+#load_module modules/ngx_http_vhost_traffic_status_module.so;
+#load_module modules/ngx_stream_server_traffic_status_module.so;
+
+# package: angie-module-wasm
+#load_module modules/ngx_wasm_module.so;
+#load_module modules/ngx_wasm_core_module.so;
+#load_module modules/ngx_http_wasm_host_module.so;
+#load_module modules/ngx_wasmtime_module.so;
+
+# package: angie-module-xslt
+#load_module modules/ngx_http_xslt_filter_module.so;
+
+# package: angie-module-zip
+#load_module modules/ngx_http_zip_module.so;
+
+# package: angie-module-zstd
+load_module modules/ngx_http_zstd_filter_module.so;
+load_module modules/ngx_http_zstd_static_module.so;
+
+user  angie;
+worker_processes  auto;
+worker_rlimit_nofile 65536;
+
+error_log  /var/log/angie/error.log notice;
+pid        /run/angie/angie.pid;
+
+events {
+    worker_connections  65536;
+}
+
+
+http {
+    include       /etc/angie/mime.types;
+    default_type  application/octet-stream;
+
+    log_format  main  '$remote_addr - $remote_user [$time_local] "$request" '
+                      '$status $body_bytes_sent "$http_referer" '
+                      '"$http_user_agent" "$http_x_forwarded_for"';
+
+    log_format extended '$remote_addr - $remote_user [$time_local] "$request" '
+                        '$status $body_bytes_sent "$http_referer" rt="$request_time" '
+                        '"$http_user_agent" "$http_x_forwarded_for" '
+                        'h="$host" sn="$server_name" ru="$request_uri" u="$uri" '
+                        'ucs="$upstream_cache_status" ua="$upstream_addr" us="$upstream_status" '
+                        'uct="$upstream_connect_time" urt="$upstream_response_time"';
+
+    access_log  /var/log/angie/access.log  main;
+
+    sendfile        on;
+    tcp_nopush     on;
+
+    keepalive_timeout  65;
+
+    #gzip  on;
+
+# Включаем zstd
+    zstd on;
+    zstd_min_length 256;
+    zstd_comp_level 5;
+    #zstd_static on;
+    zstd_types text/plain text/css text/xml application/javascript
+    application/json image/x-icon image/svg+xml;
+
+    # Proxy cache
+    proxy_cache_valid 1m;
+    proxy_cache_key $scheme$host$request_uri;
+    proxy_cache_path /cache levels=1:2 keys_zone=one:10m inactive=48h max_size=800m;
+
+
+    include /etc/angie/http.d/*.conf;
+
+# MAP для картинок
+
+map $msie $cache_control {
+ default "max-age=31536000, public, no-transform, immutable";
+ "1" "max-age=31536000, private, no-transform, immutable";
+ }
+ map $msie $vary_header {
+default "Accept";
+"1" "";
+ }
+ map $http_accept $webp_suffix {
+ "~*webp" ".webp";
+ }
+ map $http_accept $avif_suffix {
+ "~*avif" ".avif";
+ "~*webp" ".webp";
+ }
+
+}
+
+#stream {
+#    include /etc/angie/stream.d/*.conf;
+#}
+
+
+
+```
+
+</details>
+
+
+#####  файл с настройками модуля server в http.d:
+
+
+
 
 /usr/share/angie/html/site/static_site/
 ##### Задание: Запустите приложенный из дополнительных материалов к занятию на сервере.
