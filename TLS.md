@@ -2,9 +2,106 @@
 ### Подготовительные шаги:
 
 #### Шаг 1:
-Используем заготовки из предыдущего задания (сайт с worldpress и Proxy)
+Устанавливаем пакет Angie на машину с Ubuntu:
 
-#### Шаг 2: Копируем файлы из ДЗ по SFTP в директорию:
+```
+zubahin@compute-vm-2-tls:~$ angie -v
+Angie version: Angie/1.11.2
+zubahin@compute-vm-2-tls:~$ sudo angie -t
+angie: the configuration file /etc/angie/angie.conf syntax is ok
+angie: configuration file /etc/angie/angie.conf test is successful
+zubahin@compute-vm-2-tls:~$ 
+```
+
+#### Шаг 2: Настройка структуры каталогов
+
+```
+sudo mkdir -p /var/www/ip-ssl/html
+sudo mkdir -p /etc/angie/sites-available
+sudo mkdir -p /etc/angie/sites-enabled
+sudo mkdir -p /etc/angie/ssl
+```
+
+#### Шаг 3: Создание тестовой страницы
+
+```
+sudo tee /var/www/ip-ssl/html/index.html <<EOF
+<!DOCTYPE html>
+<html>
+<head>
+    <title>IP SSL Test - $(hostname -I | awk '{print $1}')</title>
+</head>
+<body>
+    <h1>SSL для IP-адреса работает!</h1>
+    <p>IP: $(hostname -I | awk '{print $1}')</p>
+    <p>Сервер: Angie</p>
+    <p>Сертификат: Let's Encrypt (6 дней)</p>
+</body>
+</html>
+EOF
+```
+
+##### Настройка прав для владельца www-data и группы www-datа
+```
+sudo chown -R www-data:www-data /var/www/ip-ssl
+sudo chmod -R 755 /var/www/ip-ssl
+```
+ 
+#### Шаг 3 Вносим изменения в конфигурацию Angie
+
+Резервное копирование конфигурации по умолчанию:
+```
+sudo mv /etc/angie/angie.conf /etc/angie/angie.conf.backup
+```
+
+Создание основной конфигурации
+
+```
+sudo tee /etc/angie/angie.conf <<EOF
+user www-data;
+worker_processes auto;
+pid /var/run/angie.pid;
+
+events {
+    worker_connections 1024;
+    multi_accept on;
+    use epoll;
+}
+
+http {
+    # Основные настройки
+    sendfile on;
+    tcp_nopush on;
+    tcp_nodelay on;
+    keepalive_timeout 65;
+    types_hash_max_size 2048;
+    server_tokens off;
+    
+    # MIME types
+    include /etc/angie/mime.types;
+    default_type application/octet-stream;
+    
+    # Логирование
+    access_log /var/log/angie/access.log;
+    error_log /var/log/angie/error.log;
+    
+    # Gzip сжатие
+    gzip on;
+    gzip_vary on;
+    gzip_proxied any;
+    gzip_comp_level 6;
+    gzip_types text/plain text/css text/xml text/javascript 
+               application/json application/javascript application/xml+rss 
+               application/atom+xml image/svg+xml;
+    
+    # Включение сайтов
+    include /etc/angie/sites-enabled/*;
+}
+EOF
+```
+
+
+
 
 /usr/share/angie/html/site/static_site/
 ##### Задание: Запустите приложенный из дополнительных материалов к занятию на сервере.
