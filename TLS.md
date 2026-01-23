@@ -5,6 +5,29 @@
 Устанавливаем пакет Angie на машину с Ubuntu:
 
 ```
+sudo apt-get update
+sudo apt-get install -y ca-certificates curl
+```
+
+Скачайте открытый ключ репозитория Angie для проверки подлинности пакетов:
+```
+sudo curl -o /etc/apt/trusted.gpg.d/angie-signing.gpg \
+            https://angie.software/keys/angie-signing.gpg
+```
+Подключите репозиторий Angie:
+```
+echo "deb https://download.angie.software/angie/$(. /etc/os-release && echo "$ID/$VERSION\_ID $VERSION\_CODENAME") main" \\ | sudo tee /etc/apt/sources.list.d/angie.list > /dev/null
+```
+Обновите индексы репозиториев:
+```
+sudo apt-get update
+```
+Установите пакет Angie:
+```
+sudo apt-get install -y angie
+```
+Проверяем установку:
+```
 zubahin@compute-vm-2-tls:~$ angie -v
 Angie version: Angie/1.11.2
 zubahin@compute-vm-2-tls:~$ sudo angie -t
@@ -13,16 +36,78 @@ angie: configuration file /etc/angie/angie.conf test is successful
 zubahin@compute-vm-2-tls:~$ 
 ```
 
-#### Шаг 2: Настройка структуры каталогов
+#### Шаг 2: Установка certbot через snap (рекомендуется Let's Encrypt)
+
+Сначала ставим Snap и из него certbot, делаем ссылку в /usr/bin
+```
+sudo apt install snap
+sudo apt install snapd
+
+sudo snap install core
+sudo snap refresh core
+
+sudo snap install --classic certbot
+
+sudo ln -s /snap/bin/certbot /usr/bin/certbot
+```
+Проверяем версию certbot:
 
 ```
-sudo mkdir -p /var/www/ip-ssl/html
-sudo mkdir -p /etc/angie/sites-available
-sudo mkdir -p /etc/angie/sites-enabled
-sudo mkdir -p /etc/angie/ssl
+zubahin@compute-vm-3:~$ certbot --version
+certbot 5.2.2
 ```
 
-#### Шаг 3: Создание тестовой страницы
+#### Шаг 3: Настройка сайта в Angie (тестовая страница) для HTTP-валидации
+
+Создаем директорию для сайта
+```
+sudo mkdir -p /var/www/denis-otus.mtdlb.ru/html
+sudo chown -R $USER:$USER /var/www/denis-otus.mtdlb.ru/html
+```
+Создаем тестовую страницу
+```
+echo "<h1>denis-otus.mtdlb.ru</h1>" | sudo tee /var/www/denis-otus.mtdlb.ru/html/index.html
+```
+Создаем конфигурационный файл сайта
+```
+sudo vim /etc/angie/http.d/denis-otus.mtdlb.ru
+```
+В конфигурационном файле создаем конфигурацию сервера:
+```
+server {
+    listen 80;
+    listen [::]:80;
+    
+    server_name denis-otus.mtdlb.ru www.denis-otus.mtdlb.ru;
+    root /var/www/denis-otus.mtdlb.ru/html;
+    
+    index index.html index.htm;
+    
+    # Критически важно для HTTP-01 challenge!
+    location ^~ /.well-known/acme-challenge/ {
+        allow all;
+        root /var/www/denis-otus.mtdlb.ru/html;
+        try_files $uri =404;
+    }
+    
+    location / {
+        try_files $uri $uri/ =404;
+    }
+}
+```
+
+Активируем сайт
+```
+sudo mkdir /etc/angie/http.d/sites-enabled/
+sudo ln -s /etc/angie/http.d/denis-otus.mtdlb.ru /etc/angie/http.d/sites-enabled/
+```
+
+Проверяем синтаксис конфигурации
+```
+sudo angie -t
+```
+# Перезапускаем Angie
+sudo systemctl restart angie
 
 ```
 sudo tee /var/www/ip-ssl/html/index.html <<EOF
@@ -100,93 +185,123 @@ http {
 EOF
 ```
 
-
-
-
-/usr/share/angie/html/site/static_site/
-##### Задание: Запустите приложенный из дополнительных материалов к занятию на сервере.
-##### Для каждой директории создайте location со своими настройками. Отдельно создайте location c регулярным выражением для отдачи картинок jpg, jpeg, png, gif.
-
-#### Шаг 3: Правим конфигурацию:
-
-Вносим изменения в конфигурацию http.d\default.conf: 
+Создание директории для логов
 ```
+sudo mkdir -p /var/log/angie
+sudo chown -R www-data:www-data /var/log/angie
+```
+
+
+#### Шаг 4: Конфигурация для получения сертификата
+
+Конфигурация для валидации Let's Encrypt
+```
+sudo tee /etc/angie/sites-available/ip-letsencrypt <<'EOF'
 server {
-    listen       80;
-    server_name  localhost;
-
-    #access_log  /var/log/angie/host.access.log  main;
-
+    listen 80;
+    server_name YOUR_IP_ADDRESS;
+    
+    # Директория root для Angie
     location / {
-        root   /usr/share/angie/html;
-        index  index.html index.htm;
+        root /var/www/ip-ssl/html;
     }
-
-    location /status/ {
-        api     /status/;
-        allow   127.0.0.1;
-        deny    all;
+    
+    # Важно: директория для ACME challenges
+    location ^~ /.well-known/acme-challenge/ {
+        root /var/www/ip-ssl/html;
+        allow all;
+        default_type "text/plain";
+        try_files $uri =404;
     }
-
-         location /site/ {
-        alias /usr/share/angie/html/site/static_site/;
-        index  index.html index.htm;
-   }
-     location /error/ {
-        alias /usr/share/angie/html/site/static_site/error;
-        index  index.html index.htm;
-   }
-     location /images/ {
-        alias /usr/share/angie/html/site/static_site/images;
-   }
-     location /assets/css {
-        alias /usr/share/angie/html/site/static_site/assets/css;
-   }
-     location /assets/fonts {
-        alias /usr/share/angie/html/site/static_site/assets/fonts;
-   }
-     location /assets/js {
-        alias /usr/share/angie/html/site/static_site/assets/js;
-   }
-location /assets/sass {
-        alias /usr/share/angie/html/site/static_site/assets/sass;
-   }
-     location ~*\.(gif|jpg|jpeg|jiff)$ {
-    root /usr/share/angie/html/site/static_site/images/;
+    
+    # Безопасность - скрыть другие .well-known
+    location ~ /\.well-known/(?!acme-challenge) {
+        deny all;
+        return 404;
     }
-#error_page  404              /404.html;
-
-    # redirect server error pages to the static page /50x.html
-    #
-    error_page   500 502 503 504  /50x.html;
-    location = /50x.html {
-        root   /usr/share/angie/html;
-    }
-
-    # proxy the PHP scripts to Apache listening on 127.0.0.1:80
-    #
-    #location ~ \.php$ {
-    #    proxy_pass   http://127.0.0.1;
-    #}
-
-    # pass the PHP scripts to FastCGI server listening on 127.0.0.1:9000
-    #
-    #location ~ \.php$ {
-    #    root           html;
-    #    fastcgi_pass   127.0.0.1:9000;
-    #    fastcgi_index  index.php;
-    #    fastcgi_param  SCRIPT_FILENAME  /scripts$fastcgi_script_name;
-    #    include        fastcgi_params;
-    #}
-# deny access to .htaccess files, if Apache's document root
-    # concurs with angie's one
-    #
-    #location ~ /\.ht {
-    #    deny  all;
-    #}
 }
+EOF
 ```
-### Проверяем, что получилось:
+
+
+Замена YOUR_IP_ADDRESS на локальный IP адрес (переменная YOUR_IP) или установка внешнего IP (руками)
+```
+YOUR_IP=$(hostname -I | awk '{print $1}')
+#Альтернатива:
+YOUR_IP=$(158.160.93.18)
+sudo touch /etc/angie/sites-available/ip-letsencrypt
+sudo sed -i "s/YOUR_IP_ADDRESS/$YOUR_IP/g" /etc/angie/sites-available/ip-letsencrypt
+```
+
+Активация конфигурации (создаем симлинк)
+```
+sudo ln -sf /etc/angie/sites-available/ip-letsencrypt /etc/angie/sites-enabled/
+```
+
+Проверка конфигурации
+```
+sudo angie -t
+```
+Запуск Angie
+```
+sudo systemctl start angie
+sudo systemctl enable angie
+```
+Проверка статуса
+```
+sudo systemctl status angie
+```
+
+### Шаг 5 Получение сертификата Let's Encrypt для IP
+
+Установка Certbot 
+```
+sudo apt install snap
+sudo apt install snapd
+sudo snap install certbot --classic
+sudo ln -s /snap/bin/certbot /usr/bin/certbot
+```
+Обязательно обновитьcя:
+Для Ubuntu/Debian
+```
+sudo apt update
+sudo apt install --only-upgrade certbot python3-certbot
+```
+Проверяем версию (должна быть не ниже 2.9.0)
+```
+certbot --version
+```
+Получение сертификата через HTTP-валидацию
+
+```
+#создаем файл html:
+sudo mkdir /var/www/ip-validation/html
+
+sudo certbot certonly --webroot \
+      -w /var/www/ip-validation/html \
+      -d $YOUR_IP \
+      --staging \  # <-- КЛЮЧЕВОЙ ПАРАМЕТР!
+      --profile shortlived \  # <-- КЛЮЧЕВОЙ ПАРАМЕТР!
+      --agree-tos \
+      --register-unsafely-without-email \
+      --no-eff-email \
+      --preferred-challenges http
+
+```
+
+
+Альтернативно, через standalone (требуется остановка Angie)
+```
+sudo systemctl stop angie
+sudo certbot certonly --standalone \
+  -d $YOUR_IP \
+  --agree-tos \
+  --register-unsafely-without-email
+sudo systemctl start angie
+```
+
+
+
 
 1) Обращение к сайту:
 zubahin@compute-vm-angie01:~$ sudo curl http://127.0.0.1/site
