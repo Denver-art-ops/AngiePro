@@ -131,125 +131,98 @@ sudo ufw status
 ![Angie.png](Angie.png)
 
 
-Резервное копирование конфигурации по умолчанию:
-```
-sudo mv /etc/angie/angie.conf /etc/angie/angie.conf.backup
-```
 
-Создание основной конфигурации
 
+#### Шаг 5: Получение сертификата через HTTP-01 Challenge
+
+Конфигурация для валидации Let's Encrypt через HTTP-01 Challenge
+Получаем сертификат (веб-сервер будет временно остановлен)
 ```
-sudo tee /etc/angie/angie.conf <<EOF
-user www-data;
-worker_processes auto;
-pid /var/run/angie.pid;
-
-events {
-    worker_connections 1024;
-    multi_accept on;
-    use epoll;
-}
-
-http {
-    # Основные настройки
-    sendfile on;
-    tcp_nopush on;
-    tcp_nodelay on;
-    keepalive_timeout 65;
-    types_hash_max_size 2048;
-    server_tokens off;
-    
-    # MIME types
-    include /etc/angie/mime.types;
-    default_type application/octet-stream;
-    
-    # Логирование
-    access_log /var/log/angie/access.log;
-    error_log /var/log/angie/error.log;
-    
-    # Gzip сжатие
-    gzip on;
-    gzip_vary on;
-    gzip_proxied any;
-    gzip_comp_level 6;
-    gzip_types text/plain text/css text/xml text/javascript 
-               application/json application/javascript application/xml+rss 
-               application/atom+xml image/svg+xml;
-    
-    # Включение сайтов
-    include /etc/angie/sites-enabled/*;
-}
-EOF
-```
-
-Создание директории для логов
-```
-sudo mkdir -p /var/log/angie
-sudo chown -R www-data:www-data /var/log/angie
+sudo certbot certonly --webroot \
+    --webroot-path /var/www/denis-otus.mtdlb.ru/html \
+    -d denis-otus.mtdlb.ru -d www.denis-otus.mtdlb.ru \
+    --agree-tos \
+    --no-eff-email \
+    --non-interactive
 ```
 
 
-#### Шаг 4: Конфигурация для получения сертификата
 
-Конфигурация для валидации Let's Encrypt
+### Шаг 6 Ручная настройка SSL (если не использовался --angie плагин)
+
+Создаем SSL конфигурацию
 ```
-sudo tee /etc/angie/sites-available/ip-letsencrypt <<'EOF'
+sudo vim /etc/angie/http.d/denis-otus.mtdlb.ru-ssl
+```
+
+И вносим конфигурационный файл:
+
+<details>
+```
 server {
     listen 80;
-    server_name YOUR_IP_ADDRESS;
+    listen [::]:80;
+    server_name example.com www.example.com;
     
-    # Директория root для Angie
-    location / {
-        root /var/www/ip-ssl/html;
-    }
+    # Редирект на HTTPS
+    return 301 https://$server_name$request_uri;
     
-    # Важно: директория для ACME challenges
+    # Сохраняем доступ к ACME challenge для обновления
     location ^~ /.well-known/acme-challenge/ {
-        root /var/www/ip-ssl/html;
         allow all;
-        default_type "text/plain";
-        try_files $uri =404;
-    }
-    
-    # Безопасность - скрыть другие .well-known
-    location ~ /\.well-known/(?!acme-challenge) {
-        deny all;
-        return 404;
+        root /var/www/example.com/html;
     }
 }
-EOF
+
+server {
+    listen 443 ssl http2;
+    listen [::]:443 ssl http2;
+    
+    server_name example.com www.example.com;
+    root /var/www/example.com/html;
+    
+    # Пути к сертификатам Let's Encrypt
+    ssl_certificate /etc/letsencrypt/live/example.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/example.com/privkey.pem;
+    
+    # Настройки SSL (рекомендованные Let's Encrypt)
+    ssl_session_cache shared:le_nginx_SSL:10m;
+    ssl_session_timeout 1440m;
+    ssl_session_tickets off;
+    
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_prefer_server_ciphers off;
+    
+    ssl_ciphers "ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:DHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES256-GCM-SHA384";
+    
+    # DH параметры (генерируем если нужно)
+    # sudo openssl dhparam -out /etc/ssl/certs/dhparam.pem 2048
+    # ssl_dhparam /etc/ssl/certs/dhparam.pem;
+    
+    # HSTS (осторожно - нельзя отключить в течение 6 месяцев)
+    # add_header Strict-Transport-Security "max-age=63072000" always;
+    
+    index index.html index.htm;
+    
+    location / {
+        try_files $uri $uri/ =404;
+    }
+    
+    # Разрешаем доступ к файлам Let's Encrypt для обновления
+    location ^~ /.well-known/acme-challenge/ {
+        allow all;
+        root /var/www/example.com/html;
+    }
+}
 ```
+</details>
 
 
-Замена YOUR_IP_ADDRESS на локальный IP адрес (переменная YOUR_IP) или установка внешнего IP (руками)
-```
-YOUR_IP=$(hostname -I | awk '{print $1}')
-#Альтернатива:
-YOUR_IP=$(158.160.93.18)
-sudo touch /etc/angie/sites-available/ip-letsencrypt
-sudo sed -i "s/YOUR_IP_ADDRESS/$YOUR_IP/g" /etc/angie/sites-available/ip-letsencrypt
-```
 
-Активация конфигурации (создаем симлинк)
-```
-sudo ln -sf /etc/angie/sites-available/ip-letsencrypt /etc/angie/sites-enabled/
-```
 
-Проверка конфигурации
-```
-sudo angie -t
-```
-Запуск Angie
-```
-sudo systemctl start angie
-sudo systemctl enable angie
-```
-Проверка статуса
-```
-sudo systemctl status angie
-```
 
-### Шаг 5 Получение сертификата Let's Encrypt для IP
+
+
 
 Установка Certbot 
 ```
