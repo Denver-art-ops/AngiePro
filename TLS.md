@@ -101,38 +101,35 @@ server {
 sudo mkdir /etc/angie/http.d/sites-enabled/
 sudo ln -s /etc/angie/http.d/denis-otus.mtdlb.ru /etc/angie/http.d/sites-enabled/
 ```
-
 Проверяем синтаксис конфигурации
 ```
 sudo angie -t
 ```
-# Перезапускаем Angie
-sudo systemctl restart angie
-
+Запускаем и включаем автозагрузку Angie
 ```
-sudo tee /var/www/ip-ssl/html/index.html <<EOF
-<!DOCTYPE html>
-<html>
-<head>
-    <title>IP SSL Test - $(hostname -I | awk '{print $1}')</title>
-</head>
-<body>
-    <h1>SSL для IP-адреса работает!</h1>
-    <p>IP: $(hostname -I | awk '{print $1}')</p>
-    <p>Сервер: Angie</p>
-    <p>Сертификат: Let's Encrypt (6 дней)</p>
-</body>
-</html>
-EOF
+sudo systemctl start angie
+sudo systemctl enable angie
+```
+Перезапускаем для применения изменений
+```
+sudo systemctl reload angie
 ```
 
-##### Настройка прав для владельца www-data и группы www-datа
+
+##### Шаг 4 Настройка фаервола 
 ```
-sudo chown -R www-data:www-data /var/www/ip-ssl
-sudo chmod -R 755 /var/www/ip-ssl
+# Открываем HTTP порт (обязательно!)
+sudo ufw allow 80/tcp
+sudo ufw allow 'Angie HTTP'
+sudo ufw reload
+
+# Проверяем статус фаервола
+sudo ufw status
 ```
  
-#### Шаг 3 Вносим изменения в конфигурацию Angie
+#### Шаг 5 Вносим изменения в DNS (запросил А-запись   denis-otus.mtdlb.ru  158.160.82.102 ) и проверяем доступность сайта по HTTP:
+
+
 
 Резервное копирование конфигурации по умолчанию:
 ```
