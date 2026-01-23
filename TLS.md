@@ -158,7 +158,9 @@ sudo vim /etc/angie/http.d/denis-otus.mtdlb.ru-ssl
 И вносим конфигурационный файл:
 
 <details>
+          
 ```
+
 server {
     listen 80;
     listen [::]:80;
@@ -214,6 +216,7 @@ server {
         root /var/www/example.com/html;
     }
 }
+
 ```
 </details>
 
