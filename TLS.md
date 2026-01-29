@@ -59,10 +59,12 @@ certbot 5.2.2
 
 #### Шаг 3: Настройка сайта в Angie (тестовая страница) для HTTP-валидации
 
-Создаем директорию для сайта
+Создаем директорию для сайта и для ACME
 ```
 sudo mkdir -p /var/www/denis-otus.mtdlb.ru/html
-sudo chown -R $USER:$USER /var/www/denis-otus.mtdlb.ru/html
+sudo mkdir -p /usr/share/angie/html/.well-known/acme-challenge
+sudo chown -R $USER:$USER /var/www/denis-otus.mtdlb.ru
+sudo chmod -R 755 /var/www/denis-otus.mtdlb.ru
 ```
 Создаем тестовую страницу
 ```
@@ -84,7 +86,7 @@ server {
     index index.html index.htm;
     
     # Критически важно для HTTP-01 challenge!
-    location ^~ /.well-known/acme-challenge/ {
+    location /.well-known/acme-challenge/ {
         allow all;
         root /var/www/denis-otus.mtdlb.ru/html;
         try_files $uri =404;
@@ -133,22 +135,47 @@ sudo ufw status
 
 
 
-#### Шаг 5: Получение сертификата через HTTP-01 Challenge
+#### Шаг 6: Получение сертификата через HTTP-01 Challenge
 
 Конфигурация для валидации Let's Encrypt через HTTP-01 Challenge
 Получаем сертификат (веб-сервер будет временно остановлен)
 ```
 sudo certbot certonly --webroot \
     --webroot-path /var/www/denis-otus.mtdlb.ru/html \
-    -d denis-otus.mtdlb.ru -d www.denis-otus.mtdlb.ru \
+    -d denis-otus.mtdlb.ru\
     --agree-tos \
     --no-eff-email \
     --non-interactive
 ```
+Запускаем команду и смотрим:
+
+```
+zubahin@compute-vm-3:~$ sudo certbot certonly --webroot \
+    --webroot-path /var/www/denis-otus.mtdlb.ru/html \
+    -d denis-otus.mtdlb.ru\
+    --agree-tos \
+    --no-eff-email \
+    --non-interactive
+Saving debug log to /var/log/letsencrypt/letsencrypt.log
+Requesting a certificate for denis-otus.mtdlb.ru
+
+Successfully received certificate.
+Certificate is saved at: /etc/letsencrypt/live/denis-otus.mtdlb.ru/fullchain.pem
+Key is saved at:         /etc/letsencrypt/live/denis-otus.mtdlb.ru/privkey.pem
+This certificate expires on 2026-04-28.
+These files will be updated when the certificate renews.
+Certbot has set up a scheduled task to automatically renew this certificate in the background.
+
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+If you like Certbot, please consider supporting our work by:
+ * Donating to ISRG / Let's Encrypt:   https://letsencrypt.org/donate
+ * Donating to EFF:                    https://eff.org/donate-le
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+zubahin@compute-vm-3:~$ 
+```
 
 
-
-### Шаг 6 Ручная настройка SSL (если не использовался --angie плагин)
+### Шаг 5 Ручная настройка SSL (если не использовался --angie плагин)
 
 Создаем SSL конфигурацию
 ```
@@ -164,15 +191,15 @@ sudo vim /etc/angie/http.d/denis-otus.mtdlb.ru-ssl
 server {
     listen 80;
     listen [::]:80;
-    server_name example.com www.example.com;
+    server_name denis-otus.mtdlb.ru www.denis-otus.mtdlb.ru;
     
     # Редирект на HTTPS
     return 301 https://$server_name$request_uri;
     
     # Сохраняем доступ к ACME challenge для обновления
-    location ^~ /.well-known/acme-challenge/ {
+    location /.well-known/acme-challenge/ {
         allow all;
-        root /var/www/example.com/html;
+        root /var/www/denis-otus.mtdlb.ru/html;
     }
 }
 
@@ -180,12 +207,12 @@ server {
     listen 443 ssl http2;
     listen [::]:443 ssl http2;
     
-    server_name example.com www.example.com;
-    root /var/www/example.com/html;
+    server_name denis-otus.mtdlb.ru.com www.denis-otus.mtdlb.ru;
+    root /var/www/denis-otus.mtdlb.ru/html;
     
     # Пути к сертификатам Let's Encrypt
-    ssl_certificate /etc/letsencrypt/live/example.com/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/example.com/privkey.pem;
+    ssl_certificate /etc/letsencrypt/live/denis-otus.mtdlb.ru/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/denis-otus.mtdlb.ru/privkey.pem;
     
     # Настройки SSL (рекомендованные Let's Encrypt)
     ssl_session_cache shared:le_nginx_SSL:10m;
@@ -213,13 +240,41 @@ server {
     # Разрешаем доступ к файлам Let's Encrypt для обновления
     location ^~ /.well-known/acme-challenge/ {
         allow all;
-        root /var/www/example.com/html;
+        root /var/www/denis-otus.mtdlb.ru/html;
     }
 }
 
 ```
 </details>
 
+
+Активируем SSL конфигурацию
+```
+zubahin@compute-vm-3:~$ sudo cp /etc/angie/http.d/arc/denis-otus.mtdlb.ru-ssl.conf /etc/angie/http.d/denis-otus.mtdlb.ru-ssl.conf
+zubahin@compute-vm-3:~$ sudo cp /etc/angie/http.d/denis-otus.mtdlb.ru.conf /etc/angie/http.d/arc/denis-otus.mtdlb.ru-ssl.conf
+zubahin@compute-vm-3:~$ sudo rm /etc/angie/http.d/denis-otus.mtdlb.ru.conf
+```
+
+Открываем HTTPS порт в фаерволе
+```
+sudo ufw allow 443/tcp
+sudo ufw reload
+sudo ufw enable
+```
+
+Проверяем синтаксис
+```
+sudo angie -t
+```
+
+Перезапускаем Angie
+```
+sudo systemctl reload angie
+```
+
+### Шаг 6 Проверяем перенаправление HTTP на HTTPS и работу сайта:
+
+![HTTPS.png](HTTPS.png)
 
 
 
