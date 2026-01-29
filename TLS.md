@@ -396,8 +396,188 @@ https://www.ssllabs.com/ssltest/analyze.html?d=denis-otus.mtdlb.ru
 ### Шаг 9  Добавляем в конфигурацию заголовки HSTS и другие дополнительные Security заголовки, а также настроми CSP:
 
 
+# HTTP сервер - редирект на HTTPS
+server {
+    listen 80;
+    listen [::]:80;
+    
+    server_name denis-otus.mtdlb.ru www.denis-otus.mtdlb.ru;
+    
+    # Редирект на HTTPS с сохранением метода запроса
+    return 301 https://$server_name$request_uri;
+    
+    # Сохраняем доступ к ACME challenge для обновления
+    location /.well-known/acme-challenge/ {
+        root /var/www/denis-otus.mtdlb.ru/html;
+        allow all;
+        try_files $uri =404;
+        access_log off;
+    }
+    
+    # Логирование для HTTP (опционально)
+    access_log /var/log/angie/denis-otus.http.access.log;
+    error_log /var/log/angie/denis-otus.http.error.log;
+}
 
-### Шаг 10  Добавляем в конфигурацию заголовки HSTS и другие дополнительные Security заголовки, а также настроми CSP:
+# HTTPS сервер - основная конфигурация
+```
+sudo vim /etc/angie/http.d/denis-otus.mtdlb.ru-ssl2
+```
+
+И вносим конфигурационный файл:
+
+<details>
+
+```
+server {
+    listen 443 ssl http2;
+    listen [::]:443 ssl http2;
+    
+    server_name denis-otus.mtdlb.ru www.denis-otus.mtdlb.ru;
+    
+    root /var/www/denis-otus.mtdlb.ru/html;
+    index index.html index.htm;
+    
+    # Пути к сертификатам Let's Encrypt
+    ssl_certificate /etc/letsencrypt/live/denis-otus.mtdlb.ru/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/denis-otus.mtdlb.ru/privkey.pem;
+    
+    # Протоколы TLS (отключаем старые версии)
+    ssl_protocols TLSv1.2 TLSv1.3;
+    
+    # Современный набор шифров (убираем DHE)
+    ssl_ciphers 'ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256';
+    
+    # Предпочтение серверных шифров можно отключить...
+    # ssl_prefer_server_ciphers off;
+    
+    # Настройки SSL сессий (кеширование)
+    ssl_session_timeout 1d;
+    ssl_session_cache shared:SSL:50m;
+    ssl_session_tickets off;
+    
+    # DH параметры для Perfect Forward Secrecy
+    # Выполняем заранее: sudo openssl dhparam -out /etc/ssl/certs/dhparam.pem 2048  потом раскомментируем:
+    # ssl_dhparam /etc/ssl/certs/dhparam.pem;
+    
+    # OCSP Stapling для ускорения проверки сертификатов
+    ssl_stapling on;
+    ssl_stapling_verify on;
+    resolver 8.8.8.8 8.8.4.4 1.1.1.1 valid=300s;
+    resolver_timeout 5s;
+       
+    # HSTS ЗАГОЛОВКИ
+     
+    # ВНИМАНИЕ: Рекомендуется тестировать без includeSubDomains и preload
+    # После уверенности можно добавить:
+    # add_header Strict-Transport-Security "max-age=63072000; includeSubDomains; preload" always;
+    
+    # Начнем с базовой версии:
+    add_header Strict-Transport-Security "max-age=63072000" always;
+
+    # ДОПОЛНИТЕЛЬНЫЕ SECURITY ЗАГОЛОВКИ
+   
+    # Защита от MIME-type sniffing
+    add_header X-Content-Type-Options "nosniff" always;
+    
+    # Защита от XSS (устарело в современных браузерах, но полезно для старых)
+    add_header X-XSS-Protection "1; mode=block" always;
+    
+    # Защита от clickjacking
+    add_header X-Frame-Options "SAMEORIGIN" always;
+    
+    # Referrer Policy
+    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+    
+    # Permissions Policy (Feature Policy)
+    add_header Permissions-Policy "geolocation=(), microphone=(), camera=(), payment=()" always;
+    
+    # Content Security Policy (настройте под ваш сайт!)
+    # Для начала можно использовать report-only режим
+    # add_header Content-Security-Policy-Report-Only "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; font-src 'self'; connect-src 'self';" always;
+    
+    # Для простого статического сайта рекомендуется:
+    add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self';" always;
+    
+    # =====================
+    # ОПТИМИЗАЦИЯ И БЕЗОПАСНОСТЬ
+    # =====================
+    
+    # Безопасные заголовки для статических файлов
+    location ~* \.(jpg|jpeg|png|gif|ico|css|js|svg|woff|woff2|ttf|eot)$ {
+        expires 1y;
+        add_header Cache-Control "public, immutable";
+        add_header X-Content-Type-Options "nosniff";
+    }
+    
+    # Разрешаем доступ к файлам Let's Encrypt для обновления
+    location ^~ /.well-known/acme-challenge/ {
+        root /var/www/denis-otus.mtdlb.ru/html;
+        allow all;
+        try_files $uri =404;
+        access_log off;
+    }
+    
+    # Основное местоположение
+    location / {
+        try_files $uri $uri/ =404;
+        
+        # Защитные заголовки для всех остальных запросов
+        add_header X-Frame-Options "SAMEORIGIN" always;
+        add_header X-Content-Type-Options "nosniff" always;
+    }
+    
+    # Блокируем доступ к скрытым файлам (.htaccess, .git и т.д.)
+    location ~ /\. {
+        deny all;
+        access_log off;
+        log_not_found off;
+        return 404;
+    }
+    
+    # Блокируем доступ к чувствительным файлам
+    location ~* (\.log$|\.sql$|\.env$|composer\.json$|composer\.lock$) {
+        deny all;
+        return 404;
+    }
+    
+    # Отключаем ненужные HTTP методы
+    if ($request_method !~ ^(GET|HEAD|POST)$) {
+        return 405;
+    }
+    
+    # Логирование
+    access_log /var/log/angie/denis-otus.https.access.log;
+    error_log /var/log/angie/denis-otus.https.error.log;
+}
+
+```
+</details>
+
+
+Сгенерируем DH параметры (рекомендую 2048 бит для баланса безопасности и производительности)
+```
+sudo openssl dhparam -out /etc/ssl/certs/dhparam.pem 2048
+```
+Раскомментируем строку с ssl_dhparam в конфигурации
+ssl_dhparam /etc/ssl/certs/dhparam.pem;
+
+Проверяем синтаксис
+```
+sudo angie -t
+```
+Перезапускаем Angie
+```
+sudo systemctl reload angie
+```
+
+
+### Шаг 10  Включаем HTTP3:
+
+
+
+
+
 
 
 ### Опциональные команды (справочно)
