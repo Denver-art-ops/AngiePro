@@ -499,9 +499,9 @@ server {
     # Для простого статического сайта рекомендуется:
     add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self';" always;
     
-    # =====================
+  
     # ОПТИМИЗАЦИЯ И БЕЗОПАСНОСТЬ
-    # =====================
+  
     
     # Безопасные заголовки для статических файлов
     location ~* \.(jpg|jpeg|png|gif|ico|css|js|svg|woff|woff2|ttf|eot)$ {
@@ -574,11 +574,42 @@ sudo systemctl reload angie
 
 ### Шаг 10  Включаем HTTP3:
 
+Для этого в конфигурацию http.d нужно добавить:
 
+```
+    # HTTP/3 НАСТРОЙКИ
+       
+    # Заголовок для поддержки HTTP/3
+    add_header Alt-Svc 'h3=":443"; ma=86400, h3-29=":443"; ma=86400' always;
+    
+    # Включение HTTP/3
+    http3 on;
+    http3_hq on;  # Для совместимости с старыми клиентами QUIC
+    
+    # Настройки QUIC
+    quic_retry on;
+    http3_max_concurrent_streams 128;
+    http3_stream_buffer_size 65536;
+```
 
+Не забываем разрешить 443 UDP (для HTTP/3):
 
+```
+sudo ufw allow 443/udp
+sudo ufw reload
+```
 
+Также добавляем в основной конфиг строки оптимизации Quic:
 
+```
+sudo vim /etc/angie/angie.conf
+```
+
+```
+    quic_retry on;
+    http3_max_table_capacity 65536;
+    http3_max_blocked_streams 128;
+```
 
 ### Опциональные команды (справочно)
 
