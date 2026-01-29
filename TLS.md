@@ -175,7 +175,7 @@ zubahin@compute-vm-3:~$
 ```
 
 
-### Шаг 5 Ручная настройка SSL (если не использовался --angie плагин)
+### Шаг 5 Ручная настройка SSL (если не использовался --angie плагин).  Сразу настроим HTTP2
 
 Создаем SSL конфигурацию
 ```
@@ -209,7 +209,11 @@ server {
     
     server_name denis-otus.mtdlb.ru www.denis-otus.mtdlb.ru;
     root /var/www/denis-otus.mtdlb.ru/html;
-    
+
+    http2 on;
+    http2_max_concurrent_streams 128;
+    http2_chunk_size 8k;
+
     # Пути к сертификатам Let's Encrypt
     ssl_certificate /etc/letsencrypt/live/denis-otus.mtdlb.ru/fullchain.pem;
     ssl_certificate_key /etc/letsencrypt/live/denis-otus.mtdlb.ru/privkey.pem;
@@ -379,6 +383,22 @@ sudo crontab -e
 ```
 0 3 * * * /snap/bin/certbot renew --quiet --post-hook "systemctl reload angie"
 ```
+
+
+### Шаг 8  Делаем промежуточное сканирование:
+```
+https://www.ssllabs.com/ssltest/analyze.html?d=denis-otus.mtdlb.ru
+```
+
+![Scan01.png](Scan02.png)
+
+
+### Шаг 9  Добавляем в конфигурацию заголовки HSTS и другие дополнительные Security заголовки, а также настроми CSP:
+
+
+
+### Шаг 10  Добавляем в конфигурацию заголовки HSTS и другие дополнительные Security заголовки, а также настроми CSP:
+
 
 ### Опциональные команды (справочно)
 
