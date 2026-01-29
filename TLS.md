@@ -207,7 +207,7 @@ server {
     listen 443 ssl http2;
     listen [::]:443 ssl http2;
     
-    server_name denis-otus.mtdlb.ru.com www.denis-otus.mtdlb.ru;
+    server_name denis-otus.mtdlb.ru www.denis-otus.mtdlb.ru;
     root /var/www/denis-otus.mtdlb.ru/html;
     
     # Пути к сертификатам Let's Encrypt
