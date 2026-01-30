@@ -198,7 +198,7 @@ zubahin@compute-vm-angie01:~/angie$ vim angie.conf
 #load_module modules/ngx_http_lua_module.so;
 #load_module modules/ngx_stream_lua_module.so;
 
- package: angie-module-modsecurity
+#package: angie-module-modsecurity
 #load_module modules/ngx_http_modsecurity_module.so;
 
 # package: angie-module-njs
