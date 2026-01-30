@@ -429,9 +429,26 @@ server {
 
 # оптимизация картинок
 location /img {
-add_header Vary $vary_header;
-add_header Cache-Control $cache_control;
-try_files $uri$avif_suffix $uri$webp_suffix $uri =404;
+    add_header Vary $vary_header;
+    add_header Cache-Control $cache_control;
+    try_files $uri$avif_suffix $uri$webp_suffix $uri =404;
+    expires max;
+    log_not_found off;
+}
+
+# Для других изображений:
+location ~* \.(gif|ico|jpeg|jpg|png|svg|webp|avif)$ {
+    expires max;
+    log_not_found off;
+    add_header Vary $vary_header;
+    add_header Cache-Control $cache_control;
+    try_files $uri$avif_suffix $uri$webp_suffix $uri =404;
+}
+
+# Для CSS/JS:
+location ~* \.(css|js)$ {
+    expires max;
+    log_not_found off;
 }
 
 }
