@@ -712,7 +712,15 @@ Link: <http://178.154.199.150/wp-json/wp/v2/posts/1>; rel="alternate"; title="JS
 Link: <http://178.154.199.150/?p=1>; rel=shortlink
 ```
 
-##### 3. Нагрузочное тестирование
+#### 3. Проверка WebP/AVIF
+
+```
+curl -H "Accept: image/avif" -I http://178.154.199.150/image.jpg
+curl -H "Accept: image/webp" -I http://178.154.199.150/image.jpg
+```
+для этого нужны файлы в соответствующем формате..
+
+##### 4. Нагрузочное тестирование
 ```
 sudo apt install apache2-utils
 ab -n 1000 -c 50 http://178.154.199.150/2026/01/30/привет-мир/
@@ -812,45 +820,43 @@ Document Path:          /2026/01/30/привет-мир/
 Document Length:        76873 bytes
 
 Concurrency Level:      50
-Time taken for tests:   26.478 seconds
+Time taken for tests:   25.862 seconds
 Complete requests:      1000
 Failed requests:        0
 Total transferred:      77312000 bytes
 HTML transferred:       76873000 bytes
-Requests per second:    37.77 [#/sec] (mean)
-Time per request:       1323.891 [ms] (mean)
-Time per request:       26.478 [ms] (mean, across all concurrent requests)
-Transfer rate:          2851.44 [Kbytes/sec] received
+Requests per second:    38.67 [#/sec] (mean)
+Time per request:       1293.100 [ms] (mean)
+Time per request:       25.862 [ms] (mean, across all concurrent requests)
+Transfer rate:          2919.34 [Kbytes/sec] received
 
 Connection Times (ms)
               min  mean[+/-sd] median   max
-Connect:        0    0   0.3      0       2
-Processing:    56 1292 186.4   1296    1644
-Waiting:       55 1287 185.8   1291    1636
-Total:         58 1292 186.2   1296    1644
+Connect:        0    0   0.4      0       3
+Processing:    52 1260 174.3   1287    1453
+Waiting:       50 1255 173.7   1282    1442
+Total:         54 1261 174.1   1287    1453
 
 Percentage of the requests served within a certain time (ms)
-  50%   1296
-  66%   1336
-  75%   1365
-  80%   1384
-  90%   1458
-  95%   1510
-  98%   1559
-  99%   1592
- 100%   1644 (longest request)
+  50%   1287
+  66%   1311
+  75%   1326
+  80%   1337
+  90%   1368
+  95%   1390
+  98%   1414
+  99%   1426
+ 100%   1453 (longest request)
 
 ```
  
 </details>
 
+## То есть даже на примере простой странички можно увидеть что оптимизация работает (длительность запросов уменьшилась для клиента)
 
-#### Проверка WebP/AVIF
 
-```
-curl -H "Accept: image/avif" -I http://178.154.199.150/image.jpg
-curl -H "Accept: image/webp" -I http://178.154.199.150/image.jpg
-```
+
+
 
 
 
