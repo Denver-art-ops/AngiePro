@@ -122,6 +122,8 @@ e850726d3268   project_app-network   bridge    local
 
 #### Шаг 2: Вносим изменения в конфигурационные файлы.
 
+Ориентируемся на имена контейнеров:
+
 #####  корневой файл angie.conf:
 ```
 zubahin@compute-vm-angie01:~/angie$ vim angie.conf
@@ -130,7 +132,7 @@ zubahin@compute-vm-angie01:~/angie$ vim angie.conf
 <details>
     
 ```
- package: angie-module-auth-jwt
+# package: angie-module-auth-jwt
 #load_module modules/ngx_http_auth_jwt_module.so;
 
 # package: angie-module-auth-ldap
@@ -347,7 +349,10 @@ default "Accept";
 
 #####  файл с настройками модуля server в http.d:
 
+Заходит в директорию хостовой системы куда были замаплены конфигурации контейнера Angie
 ```
+zubahin@compute-vm-angie01:/$ cd /home/zubahin/angie/http.d
+zubahin@compute-vm-angie01:~/angie/http.d$ 
 zubahin@compute-vm-angie01:~/angie/http.d$ vim angie.conf
 ```
 
@@ -378,7 +383,7 @@ server {
        proxy_busy_buffers_size 32k;
 
 
-        server_name example.com www.example.com;
+        server_name MyServer.com www.MyServer.com;
 
         index index.php index.html index.htm;
 
@@ -452,4 +457,404 @@ location ~* \.(css|js)$ {
 }
 
 }
+````
+</details>
+
+###  ПОЯСНЕНИЕ ПРИМЕНЕННЫХ НАСТРОЕК:
+
+#### Оптимизация сжатия: Zstd с разумными настройками
+1. Что настроено:
+```
+nginx
+zstd on;
+zstd_min_length 256;
+zstd_comp_level 5;
+zstd_types text/plain text/css text/xml application/javascript 
+application/json image/x-icon image/svg+xml;
+```
+Что это дает:  Экономия трафика и ускорение загрузки:
+Zstd (Zstandard) на 20-30% эффективнее gzip при аналогичной скорости
+
+2. Разумные ограничения:
+
+```
+zstd_min_length 256 - не сжимаем мелочь (<256 байт)
+zstd_comp_level 5 - оптимальный баланс:
+```
+Уровень 1: быстро, но слабое сжатие
+Уровень 19: максимальное сжатие, но медленно
+Сжимаем только текстовые форматы (CSS, JS, JSON, XML)
+Не сжимаем уже сжатые форматы (JPEG, PNG, MP4)
+
+#### Кэширование статики (заголовки Cache-Control)
+
+1. Что настроено:
+```
+nginx
+expires max;
+add_header Cache-Control $cache_control;
+# где cache_control = "max-age=31536000, public, no-transform, immutable"
+```
+
+2. Что это дает:
+Устранение лишних запросов к серверу (90% запросов от постоянных пользователей обслуживаются из кэша браузера):
+max-age=31536000 = 1 год кэширования в браузере
+
+Оптимизация работы браузера:
+immutable - браузер не проверяет обновления файла
+public - можно кэшировать в промежуточных прокси (CDN)
+no-transform - запрет на изменение контента (например, сжатие мобильными операторами)
+
+Повторные посещения ускоряются.
+
+#### HTTP/2-ready: reuseport и tcp_nopush
+
+1. Что настроено:
+```
+nginx
+listen 80 default_server reuseport;
+tcp_nopush on;
+```
+
+2. Что это дает:
+reuseport - масштабирование соединений:
+
+Без reuseport:
+Один listen socket - конкуренция за принятие соединений
+
+С reuseport:
+Множество listen sockets - каждому воркеру свой socket (нет конкуренции )
+Устраняет contention lock между worker процессами
+Улучшает распределение нагрузки при высоком RPS.
+Это важно при >10K одновременных соединений
+
+tcp_nopush on + sendfile on - оптимизация отправки:
+
+Без оптимизации:
+[Пакет 1: Заголовки][Пакет 2: Данные][Пакет 3: Данные]...
+
+С tcp_nopush:
+[Пакет 1: Заголовки + Данные][Пакет 2: Данные]...
+Объединение мелких TCP пакетов в более крупные (алгоритм Nagle)
+Уменьшение overhead на заголовки TCP/IP
+Особенно эффективно для мелких статических файлов
+Результат: Увеличение пропускной способности и уменьшение загрузки CPU.
+
+#### Keepalive и прокси-таймауты
+
+1.Что настроено:
+```
+nginx
+keepalive_timeout 300;
+keepalive_requests 10000;
+client_body_timeout 10;
+client_header_timeout 10;
+proxy_connect_timeout 5;
+proxy_read_timeout 10;
+```
+Что это дает:
+Keepalive соединения:
+
+Без keepalive (HTTP/1.0 стиль):
+Клиент: GET /page.html → Сервер: Ответ → Разрыв соединения
+
+С keepalive:
+Клиент: Соединение → GET /page.html → GET /style.css → GET /script.js
+Сервер: Ответ → Ответ → Ответ → Таймаут 300с
+1 соединение вместо 3+ для загрузки страницы
+Устранение накладных расходов на установку TCP соединения
+keepalive_requests 10000 - одно соединение может обслужить 10000 запросов
+
+Fail-fast таймауты:
+
+proxy_connect_timeout 5 - если бэкенд не отвечает 5 секунд, прерываем
+client_body_timeout 10 - если клиент медленно отправляет тело запроса
+Защита от "висящих" соединений, которые занимают ресурсы
+
+Результат: Ускорение последовательных запросов , защита от DDoS медленными соединениями.
+
+#### Адаптивные изображения: Поддержка AVIF/WebP через map
+
+1.Что настроено:
+```
+map $http_accept $avif_suffix {
+    "~*avif" ".avif";
+    "~*webp" ".webp";
+}
+location /img {
+    try_files $uri$avif_suffix $uri$webp_suffix $uri =404;
+}
+```
+2. Что это дает:
+
+Автоматическая доставка современных форматов:
+- WebP: 80KB (47% экономия от JPEG)
+- AVIF: 45KB (70% экономия от JPEG)
+Умное определение возможностей клиента:
+Браузер отправляет Accept: image/avif,image/webp,image/*
+Angie проверяет наличие .jpg.avif или .jpg.webp
+Отдает самый современный формат, который поддерживает клиент
+
+Экономия трафика и ускорение загрузки:
+Результат: Ускорение загрузки изображений без потери качества.
+
+#### Прокси-кэш: Настроен базовый кэш для контента
+
+1. Что настроено:
+```
+proxy_cache_path /cache levels=1:2 keys_zone=one:10m inactive=48h max_size=800m;
+proxy_cache_valid 200 1h;
+proxy_cache_min_uses 2;
+```
+2. Что это дает:
+Кэширование динамического контента:
+Оптимизация работы в памяти:
+
+keys_zone=one:10m - 10MB памяти на хранение ключей кэша (1 ключ ~ 128 байт)
+→ ~80,000 закэшированных URL в памяти
+max_size=800m - ограничение на диске, предотвращает переполнение
+inactive=48h - удаление неиспользуемых файлов через 2 дня
+
+Интеллектуальная политика кэширования:
+proxy_cache_min_uses 2 - кэшируем только то, что запрашивают минимум 2 раза
+Защита от кэширования уникальных запросов (поисковые роботы, сканеры)
+
+Результат: По оценке должно давать ускорение загрузки динамических страниц в 50-100 раз для повторных посетителей, 
+снижение нагрузки на бэкенд на 80-95%.
+
+
+### ТЕСТЫ (ДО и ПОСЛЕ оптимизации):
+
+#### 1. Проверка сжатия
+```
+curl -H "Accept-Encoding: gzip, deflate, br, zstd" -I http://178.154.199.150/2026/01/30/привет-мир/
+```
+
+```
+HTTP/1.1 200 OK
+Server: Angie/1.10.3
+Date: Fri, 30 Jan 2026 14:18:35 GMT
+Content-Type: text/html; charset=UTF-8
+Connection: keep-alive
+X-Powered-By: PHP/8.0.22
+X-Pingback: http://178.154.199.150/xmlrpc.php
+Link: <http://178.154.199.150/wp-json/>; rel="https://api.w.org/"
+Link: <http://178.154.199.150/wp-json/wp/v2/posts/1>; rel="alternate"; title="JSON"; type="application/json"
+Link: <http://178.154.199.150/?p=1>; rel=shortlink
+Content-Encoding: zstd
+```
+При необходимости можно включить gzip для старых клиентов:
+<details>
+
+```
+# Включить gzip как fallback для старых клиентов
+gzip on;
+gzip_vary on;
+gzip_proxied any;
+gzip_comp_level 6;
+gzip_min_length 256;
+gzip_types
+    application/atom+xml
+    application/javascript
+    application/json
+    application/ld+json
+    application/manifest+json
+    application/rss+xml
+    application/vnd.geo+json
+    application/vnd.ms-fontobject
+    application/x-font-ttf
+    application/x-web-app-manifest+json
+    application/xhtml+xml
+    application/xml
+    font/opentype
+    image/bmp
+    image/svg+xml
+    image/x-icon
+    text/cache-manifest
+    text/css
+    text/plain
+    text/vcard
+    text/vnd.rim.location.xloc
+    text/vtt
+    text/x-component
+    text/x-cross-domain-policy;
+
+# Оптимизация zstd
+zstd_min_length 128; # Уменьшить минимальную длину
+zstd_comp_level 3; # Оптимальное соотношение скорость/сжатие
+zstd_types
+    application/javascript
+    application/json
+    application/xml
+    application/xhtml+xml
+    image/svg+xml
+    text/css
+    text/plain
+    text/xml;
+```
+</details>
+
+##### 2. Проверка заголовков кэширования
+```
+curl -I http://178.154.199.150/2026/01/30/привет-мир/
+```
+
+```
+HTTP/1.1 200 OK
+Server: Angie/1.10.3
+Date: Fri, 30 Jan 2026 14:21:13 GMT
+Content-Type: text/html; charset=UTF-8
+Connection: keep-alive
+X-Powered-By: PHP/8.0.22
+X-Pingback: http://178.154.199.150/xmlrpc.php
+Link: <http://178.154.199.150/wp-json/>; rel="https://api.w.org/"
+Link: <http://178.154.199.150/wp-json/wp/v2/posts/1>; rel="alternate"; title="JSON"; type="application/json"
+Link: <http://178.154.199.150/?p=1>; rel=shortlink
+```
+
+##### 3. Нагрузочное тестирование
+```
+sudo apt install apache2-utils
+ab -n 1000 -c 50 http://178.154.199.150/2026/01/30/привет-мир/
+```
+
+До оптимизации (закомментируем улучшения в конфиге):
+
+<details>
+
+```
+
+```
+
+</details>This is ApacheBench, Version 2.3 <$Revision: 1903618 $>
+Copyright 1996 Adam Twiss, Zeus Technology Ltd, http://www.zeustech.net/
+Licensed to The Apache Software Foundation, http://www.apache.org/
+
+Benchmarking 178.154.199.150 (be patient)
+Completed 100 requests
+Completed 200 requests
+Completed 300 requests
+Completed 400 requests
+Completed 500 requests
+Completed 600 requests
+Completed 700 requests
+Completed 800 requests
+Completed 900 requests
+Completed 1000 requests
+Finished 1000 requests
+
+
+Server Software:        Angie/1.10.3
+Server Hostname:        178.154.199.150
+Server Port:            80
+
+Document Path:          /2026/01/30/привет-мир/
+Document Length:        76873 bytes
+
+Concurrency Level:      50
+Time taken for tests:   27.385 seconds
+Complete requests:      1000
+Failed requests:        0
+Total transferred:      77312000 bytes
+HTML transferred:       76873000 bytes
+Requests per second:    36.52 [#/sec] (mean)
+Time per request:       1369.226 [ms] (mean)
+Time per request:       27.385 [ms] (mean, across all concurrent requests)
+Transfer rate:          2757.03 [Kbytes/sec] received
+
+Connection Times (ms)
+              min  mean[+/-sd] median   max
+Connect:        0    0   0.5      0       3
+Processing:    53 1335 190.2   1365    1605
+Waiting:       49 1329 189.6   1359    1599
+Total:         53 1335 189.9   1365    1605
+
+Percentage of the requests served within a certain time (ms)
+  50%   1365
+  66%   1401
+  75%   1420
+  80%   1433
+  90%   1459
+  95%   1496
+  98%   1530
+  99%   1552
+ 100%   1605 (longest request)
+
+
+
+После оптимизации:
+
+<details>
+
+```
+This is ApacheBench, Version 2.3 <$Revision: 1903618 $>
+Copyright 1996 Adam Twiss, Zeus Technology Ltd, http://www.zeustech.net/
+Licensed to The Apache Software Foundation, http://www.apache.org/
+
+Benchmarking 178.154.199.150 (be patient)
+Completed 100 requests
+Completed 200 requests
+Completed 300 requests
+Completed 400 requests
+Completed 500 requests
+Completed 600 requests
+Completed 700 requests
+Completed 800 requests
+Completed 900 requests
+Completed 1000 requests
+Finished 1000 requests
+
+
+Server Software:        Angie/1.10.3
+Server Hostname:        178.154.199.150
+Server Port:            80
+
+Document Path:          /2026/01/30/привет-мир/
+Document Length:        76873 bytes
+
+Concurrency Level:      50
+Time taken for tests:   26.478 seconds
+Complete requests:      1000
+Failed requests:        0
+Total transferred:      77312000 bytes
+HTML transferred:       76873000 bytes
+Requests per second:    37.77 [#/sec] (mean)
+Time per request:       1323.891 [ms] (mean)
+Time per request:       26.478 [ms] (mean, across all concurrent requests)
+Transfer rate:          2851.44 [Kbytes/sec] received
+
+Connection Times (ms)
+              min  mean[+/-sd] median   max
+Connect:        0    0   0.3      0       2
+Processing:    56 1292 186.4   1296    1644
+Waiting:       55 1287 185.8   1291    1636
+Total:         58 1292 186.2   1296    1644
+
+Percentage of the requests served within a certain time (ms)
+  50%   1296
+  66%   1336
+  75%   1365
+  80%   1384
+  90%   1458
+  95%   1510
+  98%   1559
+  99%   1592
+ 100%   1644 (longest request)
+
+```
+ 
+</details>
+
+
+#### Проверка WebP/AVIF
+
+```
+curl -H "Accept: image/avif" -I http://178.154.199.150/image.jpg
+curl -H "Accept: image/webp" -I http://178.154.199.150/image.jpg
+```
+
+
+
+
+
 
