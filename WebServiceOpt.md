@@ -724,9 +724,7 @@ ab -n 1000 -c 50 http://178.154.199.150/2026/01/30/привет-мир/
 
 ```
 
-```
-
-</details>This is ApacheBench, Version 2.3 <$Revision: 1903618 $>
+This is ApacheBench, Version 2.3 <$Revision: 1903618 $>
 Copyright 1996 Adam Twiss, Zeus Technology Ltd, http://www.zeustech.net/
 Licensed to The Apache Software Foundation, http://www.apache.org/
 
@@ -779,8 +777,9 @@ Percentage of the requests served within a certain time (ms)
   98%   1530
   99%   1552
  100%   1605 (longest request)
+```
 
-
+</details>
 
 После оптимизации:
 
