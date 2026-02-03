@@ -1,3 +1,162 @@
+### Подготовительные шаги:
+
+#### Шаг 1:
+Создали ВМ в облаке.
+
+#### Шаг 2: Устанавливаем docker,  docker-compose:
+
+```
+sudo apt-get update
+
+sudo apt install docker.io
+```
+Добавим своего пользователя в группу docker чтобы можно было запускать команды без sudo:
+```
+sudo usermod -aG docker  zubahin
+```
+
+Для начала установим сам docker-compose
+```
+sudo apt install docker-compose
+```
+
+```
+sudo apt update
+```
+
+#### Шаг 3: Копируем файлы из ДЗ по SFTP в домашнюю директорию (данные файлы потребуются для установки через docker-compose):
+
+Создал папку project в домашней директории и скопировал туда файлы:
+```
+.dockerignore
+.env
+docker-compose.yml
+```
+
+#### Шаг 4: Правим YAML файл
+
+###### Модифицированный YAML
+<details>
+    
+```
+version: '3'
+
+services:
+  debug-white:
+    image: vscoder/webdebugger
+    container_name: debug-white
+    restart: unless-stopped
+    environment:
+      APP_DELAY: 0
+      APP_PORT: 8080
+      APP_BGCOLOR: white
+    ports:
+      - "9000:8080"
+    networks:
+      - app-network
+  debug-blue:
+    image: vscoder/webdebugger
+    container_name: debug-blue
+    restart: unless-stopped
+    environment:
+      APP_DELAY: 0
+      APP_PORT: 8080
+      APP_BGCOLOR: skyblue
+    ports:
+      - "9001:8080"
+    networks:
+      - app-network
+  debug-green:
+    image: vscoder/webdebugger
+    container_name: debug-green
+    restart: unless-stopped
+    environment:
+      APP_DELAY: 0
+      APP_PORT: 8080
+      APP_BGCOLOR: limegreen
+    ports:
+      - "9002:8080"     
+    networks:
+      - app-network      
+  debug-gold:
+    image: vscoder/webdebugger
+    container_name: debug-gold
+    restart: unless-stopped
+    environment:
+      APP_DELAY: 0
+      APP_PORT: 8080
+      APP_BGCOLOR: gold
+    ports:
+      - "9003:8080"
+    networks:
+      - app-network
+  angie:
+    image: docker.angie.software/angie:1.10.3-ubuntu
+    container_name: angie
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    volumes:
+      - /home/zubahin/angie:/etc/angie:ro
+    networks:
+      - app-network
+
+networks:
+  app-network:
+    driver: bridge
+
+```
+
+</details>
+
+Создаем папку angie/:
+
+```
+mkdir angie
+```
+
+#### Шаг 5: Устанавливаем контейнеры в соответствии с YAML файлом:
+```
+docker-compose up -d
+```
+
+Как итог получаем:
+
+```
+zubahin@compute-vm-angie01:~/project$ docker ps -a
+CONTAINER ID   IMAGE                                COMMAND                  CREATED       STATUS       PORTS                                 NAMES
+045f06c2aa13   docker.angie.software/angie:latest   "angie -g 'daemon of…"   2 hours ago   Up 2 hours   0.0.0.0:80->80/tcp, [::]:80->80/tcp   webserver
+2f79a024d203   wordpress:6.0.1-php8.0-fpm-alpine    "docker-entrypoint.s…"   2 hours ago   Up 2 hours   9000/tcp                              wordpress
+381eaef0e8b4   mysql:8.0                            "docker-entrypoint.s…"   2 hours ago   Up 2 hours   3306/tcp, 33060/tcp                   db
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 ### Подготовительные шаги:
 
