@@ -715,4 +715,245 @@ server {
 
 
 
-### Поведение системы меняется! Тепер отображаются только страницы "белого" и "голубого" бэкендов пока они доступны.  если отключить их командой down или отключить контейнеры с ними, то срабатывает бэкап сервер и демонстрируется "золотой" сервер.
+### Поведение системы меняется! Тепер отображаются только страницы "белого" и "голубого" бэкендов пока они доступны.  если отключить их командой down или отключить контейнеры с ними, то срабатывает бэкап сервер и демонстрируется "золотой" сервер.  Причем открывается с задержкой (после неудачных попыток обращения к серверам как раньше):
+
+![Angie_04.png](Angie_04.png)
+
+#### Шаг 10: Hash балансировка по IP-адресу клиента (статичная балансировка по пользователям):
+
+правим существующий default.conf:
+<details>
+    
+```
+
+# Настройки балансировки
+    upstream backend_pool {
+    hash $remote_addr consistent;  # Параметр consistent в hash-балансировке минимизирует перераспределение при изменении количества бэкендов
+    # Активные серверы (убираем slow start)
+    server debug-white:8080 sid=white max_fails=3 fail_timeout=30s;
+    server debug-blue:8080 sid=blue max_fails=3 fail_timeout=30s;
+    server debug-green:8080 sid=green max_fails=3 fail_timeout=30s;
+    server debug-gold:8080 sid=gold max_fails=3 fail_timeout=30s;
+}
+server {
+    listen       80;
+    server_name  localhost 158.160.93.160;
+
+    #access_log  /var/log/angie/host.access.log  main;
+
+    location / {
+        root   /usr/share/angie/html;
+        index  index.html index.htm;
+    }
+
+    location /status/ {
+        api     /status/;
+        allow   127.0.0.1;
+        deny    all;
+    }
+    location /test/ {
+        # Проксирование на бекенд пул
+        proxy_pass http://backend_pool;
+    }
+
+    #error_page  404              /404.html;
+
+    # redirect server error pages to the static page /50x.html
+    #
+    error_page   500 502 503 504  /50x.html;
+    location = /50x.html {
+        root   /usr/share/angie/html;
+    }
+
+    # proxy the PHP scripts to Apache listening on 127.0.0.1:80
+    #
+    #location ~ \.php$ {
+    #    proxy_pass   http://127.0.0.1;
+    #}
+
+    # pass the PHP scripts to FastCGI server listening on 127.0.0.1:9000
+    #
+    #location ~ \.php$ {
+#    proxy_pass   http://127.0.0.1;
+    #}
+
+    # pass the PHP scripts to FastCGI server listening on 127.0.0.1:9000
+    #
+    #location ~ \.php$ {
+    #    root           html;
+    #    fastcgi_pass   127.0.0.1:9000;
+    #    fastcgi_index  index.php;
+    #    fastcgi_param  SCRIPT_FILENAME  /scripts$fastcgi_script_name;
+    #    include        fastcgi_params;
+    #}
+
+    # deny access to .htaccess files, if Apache's document root
+    # concurs with angie's one
+    #
+    #location ~ /\.ht {
+    #    deny  all;
+    #}
+}
+```
+
+</details>
+
+Теперь по IP адресу все время выдается один и тот же сервер (в моем случае "gold").
+
+#### Шаг 11: Hash балансировка по cookie сессии (для sticky sessions):
+
+правим существующий default.conf:
+<details>
+    
+```
+
+# Настройки балансировки
+    upstream backend_pool {
+    hash $cookie_jsessionid consistent; # Параметр consistent в hash-балансировке минимизирует перераспределение при изменении количества бэкендов
+    # Активные серверы
+    server debug-white:8080 sid=white max_fails=3 fail_timeout=30s;
+    server debug-blue:8080 sid=blue max_fails=3 fail_timeout=30s;
+    server debug-green:8080 sid=green max_fails=3 fail_timeout=30s;
+    server debug-gold:8080 sid=gold max_fails=3 fail_timeout=30s;
+}
+server {
+    listen       80;
+    server_name  localhost 158.160.93.160;
+
+    #access_log  /var/log/angie/host.access.log  main;
+
+    location / {
+        root   /usr/share/angie/html;
+        index  index.html index.htm;
+    }
+
+    location /status/ {
+        api     /status/;
+        allow   127.0.0.1;
+        deny    all;
+    }
+    location /test/ {
+        # Проксирование на бекенд пул
+        proxy_pass http://backend_pool;
+    }
+
+    #error_page  404              /404.html;
+
+    # redirect server error pages to the static page /50x.html
+    #
+    error_page   500 502 503 504  /50x.html;
+    location = /50x.html {
+        root   /usr/share/angie/html;
+    }
+
+    # proxy the PHP scripts to Apache listening on 127.0.0.1:80
+    #
+    #location ~ \.php$ {
+    #    proxy_pass   http://127.0.0.1;
+    #}
+
+    # pass the PHP scripts to FastCGI server listening on 127.0.0.1:9000
+    #
+    #location ~ \.php$ {
+#    proxy_pass   http://127.0.0.1;
+    #}
+
+    # pass the PHP scripts to FastCGI server listening on 127.0.0.1:9000
+    #
+    #location ~ \.php$ {
+    #    root           html;
+    #    fastcgi_pass   127.0.0.1:9000;
+    #    fastcgi_index  index.php;
+    #    fastcgi_param  SCRIPT_FILENAME  /scripts$fastcgi_script_name;
+    #    include        fastcgi_params;
+    #}
+
+    # deny access to .htaccess files, if Apache's document root
+    # concurs with angie's one
+    #
+    #location ~ /\.ht {
+    #    deny  all;
+    #}
+}
+```
+
+</details>
+
+#### Шаг 11: Hash балансировка по User-Agent + IP (для балансировки по типам устройств)
+
+правим существующий default.conf:
+<details>
+    
+```
+
+# Настройки балансировки
+    upstream backend_pool {
+    hash $http_user_agent$remote_addr; # 
+    # Активные серверы
+    server debug-white:8080 sid=white max_fails=3 fail_timeout=30s;
+    server debug-blue:8080 sid=blue max_fails=3 fail_timeout=30s;
+    server debug-green:8080 sid=green max_fails=3 fail_timeout=30s;
+    server debug-gold:8080 sid=gold max_fails=3 fail_timeout=30s;
+}
+server {
+    listen       80;
+    server_name  localhost 158.160.93.160;
+
+    #access_log  /var/log/angie/host.access.log  main;
+
+    location / {
+        root   /usr/share/angie/html;
+        index  index.html index.htm;
+    }
+
+    location /status/ {
+        api     /status/;
+        allow   127.0.0.1;
+        deny    all;
+    }
+    location /test/ {
+        # Проксирование на бекенд пул
+        proxy_pass http://backend_pool;
+    }
+
+    #error_page  404              /404.html;
+
+    # redirect server error pages to the static page /50x.html
+    #
+    error_page   500 502 503 504  /50x.html;
+    location = /50x.html {
+        root   /usr/share/angie/html;
+    }
+
+    # proxy the PHP scripts to Apache listening on 127.0.0.1:80
+    #
+    #location ~ \.php$ {
+    #    proxy_pass   http://127.0.0.1;
+    #}
+
+    # pass the PHP scripts to FastCGI server listening on 127.0.0.1:9000
+    #
+    #location ~ \.php$ {
+#    proxy_pass   http://127.0.0.1;
+    #}
+
+    # pass the PHP scripts to FastCGI server listening on 127.0.0.1:9000
+    #
+    #location ~ \.php$ {
+    #    root           html;
+    #    fastcgi_pass   127.0.0.1:9000;
+    #    fastcgi_index  index.php;
+    #    fastcgi_param  SCRIPT_FILENAME  /scripts$fastcgi_script_name;
+    #    include        fastcgi_params;
+    #}
+
+    # deny access to .htaccess files, if Apache's document root
+    # concurs with angie's one
+    #
+    #location ~ /\.ht {
+    #    deny  all;
+    #}
+}
+```
+
+</details>
