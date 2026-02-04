@@ -519,18 +519,18 @@ server {
 Сначала смотрим базовуб страничку:
 http://158.160.93.160/ 
 
-[Angie.png](Angie.png)
+![Angie.png](Angie.png)
 
 Идем по HTTP на внешний адрес http://158.160.93.160/ по портам 9000-9003:
 http://158.160.93.160:9000 и так далее (проверяем что серверы доступны по прямым обращениям):
 
-[9001.png](9001.png)
+![9001.png](9001.png)
 
-[9002.png](9001.png)
+![9002.png](9001.png)
 
-[9003.png](9001.png)
+![9003.png](9001.png)
 
-[9004.png](9001.png)
+![9004.png](9001.png)
 
 
 Далее пробуем обратится на location /test/:
@@ -622,13 +622,13 @@ server {
 
 И теперь видим 
 
-[Angie_01.png](Angie_01.png)
+![Angie_01.png](Angie_01.png)
 
-[Angie_02.png](Angie_02.png)
+![Angie_02.png](Angie_02.png)
 
-[Angie_03.png](Angie_03.png)
+![Angie_03.png](Angie_03.png)
 
-[Angie_04.png](Angie_04.png)
+![Angie_04.png](Angie_04.png)
 
 
 ### Подготовительные шаги:
