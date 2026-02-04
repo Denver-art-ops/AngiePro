@@ -957,3 +957,86 @@ server {
 ```
 
 </details>
+
+ИТОГ:  с мобильного телефона открывается страничка "blue" c ПК "gold" хотя оба работают через один WiFi роутер (единый внешний IP)
+
+#### Шаг 12: Random-балансировка 
+
+правим существующий default.conf:
+<details>
+    
+```
+
+# Настройки балансировки
+    upstream backend_pool {
+    random; #  Random-балансировка
+    # Активные серверы
+    server debug-white:8080 sid=white max_fails=3 fail_timeout=30s;
+    server debug-blue:8080 sid=blue max_fails=3 fail_timeout=30s;
+    server debug-green:8080 sid=green max_fails=3 fail_timeout=30s;
+    server debug-gold:8080 sid=gold max_fails=3 fail_timeout=30s;
+}
+server {
+    listen       80;
+    server_name  localhost 158.160.93.160;
+
+    #access_log  /var/log/angie/host.access.log  main;
+
+    location / {
+        root   /usr/share/angie/html;
+        index  index.html index.htm;
+    }
+
+    location /status/ {
+        api     /status/;
+        allow   127.0.0.1;
+        deny    all;
+    }
+    location /test/ {
+        # Проксирование на бекенд пул
+        proxy_pass http://backend_pool;
+    }
+
+    #error_page  404              /404.html;
+
+    # redirect server error pages to the static page /50x.html
+    #
+    error_page   500 502 503 504  /50x.html;
+    location = /50x.html {
+        root   /usr/share/angie/html;
+    }
+
+    # proxy the PHP scripts to Apache listening on 127.0.0.1:80
+    #
+    #location ~ \.php$ {
+    #    proxy_pass   http://127.0.0.1;
+    #}
+
+    # pass the PHP scripts to FastCGI server listening on 127.0.0.1:9000
+    #
+    #location ~ \.php$ {
+#    proxy_pass   http://127.0.0.1;
+    #}
+
+    # pass the PHP scripts to FastCGI server listening on 127.0.0.1:9000
+    #
+    #location ~ \.php$ {
+    #    root           html;
+    #    fastcgi_pass   127.0.0.1:9000;
+    #    fastcgi_index  index.php;
+    #    fastcgi_param  SCRIPT_FILENAME  /scripts$fastcgi_script_name;
+    #    include        fastcgi_params;
+    #}
+
+    # deny access to .htaccess files, if Apache's document root
+    # concurs with angie's one
+    #
+    #location ~ /\.ht {
+    #    deny  all;
+    #}
+}
+```
+
+</details>
+
+После применения конфигурации серверы сменяются "не по кругу" а в произвольном порядке. Проверено.
