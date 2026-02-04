@@ -256,7 +256,7 @@ drwxr-xr-x 2 root    root     4096 Nov 13 18:19 stream.d
 
 ```
 
-Вносим изменения в файл angie.conf
+Вносить изменения в файл angie.conf не будем:
 <details>
     
 ```
