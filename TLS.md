@@ -390,7 +390,7 @@ sudo crontab -e
 https://www.ssllabs.com/ssltest/analyze.html?d=denis-otus.mtdlb.ru
 ```
 
-![Scan01.png](Scan02.png)
+![Scan01.png](Scan01.png)
 
 
 ### Шаг 9  Добавляем в конфигурацию заголовки HSTS и другие дополнительные Security заголовки, а также настроми CSP:
