@@ -259,6 +259,33 @@ DB_ROOT_PASSWORD=hGBn23i9Pos&7
 
 ```
 
+Обновляем индексы репозиториев,устанавливаем Docker и docker-compose:
+```
+sudo apt-get update
+
+sudo apt install docker.io
+
+sudo apt update
+
+sudo apt install docker-compose
+
+```
+
+Запускаем docker-compose:
+
+```
+sudo docker-compose up -d
+```
+
+### Шаг 4.  Проверяем результаты:
+
+```
+zubahin@compute-vm-3:~/project$ sudo docker ps -a
+CONTAINER ID   IMAGE              COMMAND                  CREATED          STATUS          PORTS                    NAMES
+238a66cc4c55   wordpress:latest   "docker-entrypoint.s…"   13 minutes ago   Up 13 minutes   127.0.0.1:8080->80/tcp   wordpress-app
+5f462c30f52a   mysql:8.0          "docker-entrypoint.s…"   13 minutes ago   Up 13 minutes   3306/tcp, 33060/tcp      wordpress-db
+```
+И идем донастраивать Wordpress:
 
 
 
