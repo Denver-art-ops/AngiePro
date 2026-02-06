@@ -269,14 +269,26 @@ CONTAINER ID   IMAGE              COMMAND                  CREATED          STAT
 <details>
   
 ```
-# /etc/angie/http.d/secure.conf
-
+# 1 RATE LIMITING
 # Глобальные лимиты соединений
 limit_conn_zone $binary_remote_addr zone=conn_limit_per_ip:10m;
 limit_req_zone $binary_remote_addr zone=req_limit_per_ip:10m rate=30r/s;
 
 # Зона для медленных соединений
 limit_conn_zone $server_name zone=slow_conn:10m;
+
+
+# Специальные зоны
+limit_req_zone $binary_remote_addr zone=login_limit:10m rate=5r/m;
+limit_req_zone $binary_remote_addr zone=api_limit:10m rate=10r/s;
+limit_req_zone $binary_remote_addr zone=static_limit:10m rate=100r/s;
+
+# 2. ОБЩИЕ НАСТРОЙКИ КЭШИРОВАНИЯ
+proxy_cache_path /var/cache/angie levels=1:2 keys_zone=proxy_cache:100m 
+                 max_size=1g inactive=60m use_temp_path=off;
+
+proxy_cache_path /var/cache/angie/static levels=1:2 keys_zone=static_cache:50m 
+                 max_size=500m inactive=365d use_temp_path=off;
 
 server {
     listen 443 ssl;
@@ -285,7 +297,7 @@ server {
     
     server_name denis-otus.mtdlb.ru www.denis-otus.mtdlb.ru;
  
-    # 1. SSL НАСТРОЙКИ
+    # 3. SSL НАСТРОЙКИ
    
     # Пути к сертификатам
     ssl_certificate /etc/letsencrypt/live/denis-otus.mtdlb.ru/fullchain.pem;
@@ -304,7 +316,7 @@ server {
     # DH параметры
     ssl_dhparam /etc/ssl/certs/dhparam.pem;
     
-     # 2. БАЗОВЫЕ ЛИМИТЫ
+     # 4. БАЗОВЫЕ ЛИМИТЫ
         
     # Ограничение размера запросов
     client_max_body_size 10M;
@@ -313,7 +325,7 @@ server {
     large_client_header_buffers 4 8k;
     
      
-    # 3. ЗАЩИТА ОТ МЕДЛЕННЫХ СОЕДИНЕНИЙ
+    # 5. ЗАЩИТА ОТ МЕДЛЕННЫХ СОЕДИНЕНИЙ
        
     # Ограничение времени чтения тела запроса
     client_body_timeout 5s;  # Максимальное время для передачи тела запроса от клиента. Если клиент не успевает за 5 секунд - соединение разрывается.
@@ -333,19 +345,12 @@ server {
     
     # Защита от Slowloris атак
     limit_conn slow_conn 1000;  # Глобальное ограничение на медленные соединения.
-
-     # 4. RATE LIMITING
     
     # Общий rate limiting
     limit_req zone=req_limit_per_ip burst=50 nodelay; #  limit_req zone создает зоны для ограничений  burst - разрешает кратковременные всплески nodelay - немедленное применение ограничений
     limit_req_status 429;  # Позволяет переопределить код ответа, используемый при отклонении запросов.
     
-    # Отдельные зоны для особых location
-    limit_req_zone $binary_remote_addr zone=login_limit:10m rate=5r/m;  # создаем зону login_limit  5 запросов в секунду
-    limit_req_zone $binary_remote_addr zone=api_limit:10m rate=10r/s; # создаем зону login_api  10 запросов в секунду
-    limit_req_zone $binary_remote_addr zone=static_limit:10m rate=100r/s;  # создаем зону static_limit  100 запросов в секунду
-    
-    # 5. SECURITY HEADERS
+    # 6. SECURITY HEADERS
    
     # HSTS - принудительное использование HTTPS  (принудительный HTTPS на 2 года)
     add_header Strict-Transport-Security "max-age=63072000; includeSubDomains; preload" always;
@@ -368,15 +373,8 @@ server {
     # CSP - политика безопасности контента (защита от XSS через whitelist источников)
     add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self';" always;
     
-    # 6. НАСТРОЙКИ КЭШИРОВАНИЯ
-       
-    # Кэш для прокси
-    proxy_cache_path /var/cache/angie levels=1:2 keys_zone=proxy_cache:100m 
-                     max_size=1g inactive=60m use_temp_path=off;
-    
-    # Кэш для статики
-    proxy_cache_path /var/cache/angie/static levels=1:2 keys_zone=static_cache:50m 
-                     max_size=500m inactive=365d use_temp_path=off;
+    # 7. НАСТРОЙКИ КЭШИРОВАНИЯ
+    # КОММЕНТАРИЙ: proxy_cache_path перенесены на уровень http выше
     
     # Ключи кэширования
     proxy_cache_key "$scheme$request_method$host$request_uri";
@@ -387,7 +385,7 @@ server {
     proxy_cache_bypass $cookie_nocache $arg_nocache;
     proxy_no_cache $cookie_nocache $arg_nocache;
     
-    # 7. ПРОКСИРОВАНИЕ
+    # 8. ПРОКСИРОВАНИЕ
     
     # Основной location
     location / {
@@ -425,7 +423,7 @@ server {
         limit_req zone=req_limit_per_ip burst=30 delay=20;
     }
     
-    # 8. СТАТИЧЕСКИЕ ФАЙЛЫ
+    # 9. СТАТИЧЕСКИЕ ФАЙЛЫ
     
     location ~* \.(jpg|jpeg|png|gif|ico|css|js|svg|woff|woff2|ttf|eot|webp|avif)$ {
         proxy_pass http://127.0.0.1:8080;
@@ -452,7 +450,7 @@ server {
         proxy_read_timeout 5s;
     }
     
-    # 9. ЗАЩИЩЕННЫЕ LOCATION
+    # 10. ЗАЩИЩЕННЫЕ LOCATION
     
     # Защита входа в систему
     location ~ ^/(wp-login|login|admin|administrator|dashboard) {
@@ -482,7 +480,7 @@ server {
         proxy_cache_bypass 1;
     }
     
-    # API endpoint protection
+    # Защита API
     location ~ ^/api/ {
         proxy_pass http://127.0.0.1:8080;
         proxy_set_header Host $host;
@@ -504,7 +502,7 @@ server {
         proxy_cache_key "$scheme$request_method$host$request_uri$is_args$args";
     }
     
-    # 10. ЗАЩИТА ОТ БОТОВ И СКАНЕРОВ
+    # 11. ЗАЩИТА ОТ БОТОВ И СКАНЕРОВ
     
     # Блокировка известных сканеров
     if ($http_user_agent ~* (nmap|nikto|sqlmap|w3af|acunetix|openvas|nessus|metasploit|dirbuster|wapiti|burpsuite|hydra)) {
@@ -538,7 +536,7 @@ server {
         return 404;
     }
     
-    # 11. LET'S ENCRYPT
+    # 12. НАСТРОЙКИ LET'S ENCRYPT
      
     location ^~ /.well-known/acme-challenge/ {
         root /var/www/denis-otus.mtdlb.ru/html;
@@ -548,7 +546,7 @@ server {
         expires off;
     }
     
-    # 12. КАСТОМНЫЕ ОШИБКИ
+    # 13. КАСТОМНЫЕ ОШИБКИ
       
     error_page 429 /429.html;
     error_page 444 /444.html;
@@ -562,7 +560,7 @@ server {
     
     location = /444.html {
         internal;
-        return 444;
+        return 444;  # Просто отбиваем соединение
     }
     
     location = /403.html {
@@ -570,7 +568,7 @@ server {
         return 403 '{"error": "Forbidden", "message": "Access denied"}';
     }
     
-    # 13. ЛОГИРОВАНИЕ
+    # 14. ЛОГИРОВАНИЕ
       
     # Формат лога с детальной информацией
     log_format security '$remote_addr - $remote_user [$time_local] '
@@ -591,7 +589,7 @@ server {
     access_log /var/log/angie/slow.log security if=$request_time>5;
 }
 
-# HTTP REDIRECT
+# 15. HTTP REDIRECT
 
 server {
     listen 80;
