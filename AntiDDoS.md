@@ -39,8 +39,8 @@ services:
     environment:
       MYSQL_DATABASE: wordpress
       MYSQL_USER: wordpress
-      MYSQL_PASSWORD: ${DB_PASSWORD:Gh56Tyfg091df}
-      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:hGBn23i9Pos&7}
+      MYSQL_PASSWORD: ${DB_PASSWORD:-Gh56Tyfg091df}
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-Gh56Tyfg091df_root}
     volumes:
       - wordpress_db_data:/var/lib/mysql
     networks:
@@ -55,18 +55,13 @@ services:
     container_name: wordpress-app
     restart: unless-stopped
     ports:
-      - "127.0.0.1:8080:80"  # Только localhost, наружу не публикуем
+      - "127.0.0.1:8080:80"
     environment:
       WORDPRESS_DB_HOST: wordpress-db:3306
       WORDPRESS_DB_USER: wordpress
-      WORDPRESS_DB_PASSWORD: ${DB_PASSWORD:Gh56Tyfg091df}
+      WORDPRESS_DB_PASSWORD: ${DB_PASSWORD:-Gh56Tyfg091df}
       WORDPRESS_DB_NAME: wordpress
-      WORDPRESS_CONFIG_EXTRA: |
-        define('WP_HOME', 'https://denis-otus.mtdlb.ru');
-        define('WP_SITEURL', 'https://denis-otus.mtdlb.ru');
-        define('FORCE_SSL_ADMIN', true);
-        if ($_SERVER['HTTP_X_FORWARDED_PROTO'] == 'https')
-          $_SERVER['HTTPS'] = 'on';
+      # УДАЛИТЕ WORDPRESS_CONFIG_EXTRA отсюда
     volumes:
       - wordpress_data:/var/www/html
       - ./uploads.ini:/usr/local/etc/php/conf.d/uploads.ini
@@ -123,43 +118,24 @@ server {
     ssl_stapling_verify on;
     resolver 8.8.8.8 8.8.4.4 1.1.1.1 valid=300s;
     resolver_timeout 5s;
-    
-    # Security headers
-    add_header Strict-Transport-Security "max-age=63072000" always;
-    add_header X-Content-Type-Options "nosniff" always;
-    add_header X-XSS-Protection "1; mode=block" always;
-    add_header X-Frame-Options "SAMEORIGIN" always;
-    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
-    add_header Permissions-Policy "geolocation=(), microphone=(), camera=(), payment=()" always;
-    
-    # Для WordPress делаем  мягкое CSP
-    add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' https://*.googletagmanager.com https://*.google-analytics.com https://*.googleapis.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: https:; font-src 'self' https://fonts.gstatic.com; connect-src 'self' https://*.google-analytics.com;" always;
-    
+        
     # Корневая директория теперь не нужна для статики - ее убираем
     # WordPress будет обслуживать файлы через контейнер
     
     # Проксирование на WordPress контейнер
-    location / {
+location / {
         proxy_pass http://127.0.0.1:8080;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
         proxy_set_header X-Forwarded-Host $host;
-        proxy_set_header X-Forwarded-Port $server_port;
         
-        # Оптимизации для прокси
+        # Простые настройки без сложных опций
         proxy_redirect off;
-        proxy_buffering on;
-        proxy_buffer_size 128k;
-        proxy_buffers 256 16k;
-        proxy_busy_buffers_size 256k;
-        proxy_temp_file_write_size 256k;
         
-        # Таймауты
-        proxy_connect_timeout 90;
-        proxy_send_timeout 90;
-        proxy_read_timeout 90;
+        # Важно: Добавляем заголовок для WordPress
+        proxy_set_header HTTPS on;
     }
     
     # Кэширование статических файлов WordPress
@@ -255,7 +231,7 @@ sudo mv /etc/angie/http.d/denis-otus.mtdlb.ru-ssl2.conf /etc/angie/http.d/arc
 zubahin@compute-vm-3:~/project$ sudo vim .env
 
 DB_PASSWORD=Gh56Tyfg091df
-DB_ROOT_PASSWORD=hGBn23i9Pos&7
+DB_ROOT_PASSWORD=Gh56Tyfg091df_root
 
 ```
 
