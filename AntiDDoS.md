@@ -254,527 +254,388 @@ CONTAINER ID   IMAGE              COMMAND                  CREATED          STAT
 
 
 
+### Таким образом настроены:
+
+1 Рабочий WordPress в Docker
+2 MySQL в отдельном контейнере
+3 Angie на хосте как HTTPS прокси с SSL
+4 Автоматические редиректы HTTP→HTTPS
+5 Безопасные заголовки
+6 Кэширование статики
 
 
-
-
-
-
-
-
-
-### Подготовительные шаги:
-
-#### Шаг 1:
-Устанавливаем пакет Angie на машину с Ubuntu:
-
-```
-sudo apt-get update
-sudo apt-get install -y ca-certificates curl
-```
-
-Скачайте открытый ключ репозитория Angie для проверки подлинности пакетов:
-```
-sudo curl -o /etc/apt/trusted.gpg.d/angie-signing.gpg \
-            https://angie.software/keys/angie-signing.gpg
-```
-Подключите репозиторий Angie:
-```
-echo "deb https://download.angie.software/angie/$(. /etc/os-release && echo "$ID/$VERSION\_ID $VERSION\_CODENAME") main" \\ | sudo tee /etc/apt/sources.list.d/angie.list > /dev/null
-```
-Обновите индексы репозиториев:
-```
-sudo apt-get update
-```
-Установите пакет Angie:
-```
-sudo apt-get install -y angie
-```
-Проверяем установку:
-```
-zubahin@compute-vm-2-tls:~$ angie -v
-Angie version: Angie/1.11.2
-zubahin@compute-vm-2-tls:~$ sudo angie -t
-angie: the configuration file /etc/angie/angie.conf syntax is ok
-angie: configuration file /etc/angie/angie.conf test is successful
-zubahin@compute-vm-2-tls:~$ 
-```
-
-#### Шаг 2: Установка certbot через snap (рекомендуется Let's Encrypt)
-
-Сначала ставим Snap и из него certbot, делаем ссылку в /usr/bin
-```
-sudo apt install snap
-sudo apt install snapd
-
-sudo snap install core
-sudo snap refresh core
-
-sudo snap install --classic certbot
-
-sudo ln -s /snap/bin/certbot /usr/bin/certbot
-```
-Проверяем версию certbot:
-
-```
-zubahin@compute-vm-3:~$ certbot --version
-certbot 5.2.2
-```
-
-#### Шаг 3: Настройка сайта в Angie (тестовая страница) для HTTP-валидации
-
-Создаем директорию для сайта и для ACME
-```
-sudo mkdir -p /var/www/denis-otus.mtdlb.ru/html
-sudo mkdir -p /usr/share/angie/html/.well-known/acme-challenge
-sudo chown -R $USER:$USER /var/www/denis-otus.mtdlb.ru
-sudo chmod -R 755 /var/www/denis-otus.mtdlb.ru
-```
-Создаем тестовую страницу
-```
-echo "<h1>denis-otus.mtdlb.ru</h1>" | sudo tee /var/www/denis-otus.mtdlb.ru/html/index.html
-```
-Создаем конфигурационный файл сайта
-```
-sudo vim /etc/angie/http.d/denis-otus.mtdlb.ru
-```
-В конфигурационном файле создаем конфигурацию сервера:
-```
-server {
-    listen 80;
-    listen [::]:80;
-    
-    server_name denis-otus.mtdlb.ru www.denis-otus.mtdlb.ru;
-    root /var/www/denis-otus.mtdlb.ru/html;
-    
-    index index.html index.htm;
-    
-    # Критически важно для HTTP-01 challenge!
-    location /.well-known/acme-challenge/ {
-        allow all;
-        root /var/www/denis-otus.mtdlb.ru/html;
-        try_files $uri =404;
-    }
-    
-    location / {
-        try_files $uri $uri/ =404;
-    }
-}
-```
-
-Активируем сайт
-```
-sudo mkdir /etc/angie/http.d/sites-enabled/
-sudo ln -s /etc/angie/http.d/denis-otus.mtdlb.ru /etc/angie/http.d/sites-enabled/
-```
-Проверяем синтаксис конфигурации
-```
-sudo angie -t
-```
-Запускаем и включаем автозагрузку Angie
-```
-sudo systemctl start angie
-sudo systemctl enable angie
-```
-Перезапускаем для применения изменений
-```
-sudo systemctl reload angie
-```
-
-
-##### Шаг 4 Настройка фаервола 
-```
-# Открываем HTTP порт (обязательно!)
-sudo ufw allow 80/tcp
-sudo ufw allow 'Angie HTTP'
-sudo ufw reload
-
-# Проверяем статус фаервола
-sudo ufw status
-```
- 
-#### Шаг 5 Вносим изменения в DNS (запросил А-запись   denis-otus.mtdlb.ru  158.160.82.102 ) и проверяем доступность сайта по HTTP:
-![Angie.png](Angie.png)
-
-
-
-
-#### Шаг 6: Получение сертификата через HTTP-01 Challenge
-
-Конфигурация для валидации Let's Encrypt через HTTP-01 Challenge
-Получаем сертификат (веб-сервер будет временно остановлен)
-```
-sudo certbot certonly --webroot \
-    --webroot-path /var/www/denis-otus.mtdlb.ru/html \
-    -d denis-otus.mtdlb.ru\
-    --agree-tos \
-    --no-eff-email \
-    --non-interactive
-```
-Запускаем команду и смотрим:
-
-```
-zubahin@compute-vm-3:~$ sudo certbot certonly --webroot \
-    --webroot-path /var/www/denis-otus.mtdlb.ru/html \
-    -d denis-otus.mtdlb.ru\
-    --agree-tos \
-    --no-eff-email \
-    --non-interactive
-Saving debug log to /var/log/letsencrypt/letsencrypt.log
-Requesting a certificate for denis-otus.mtdlb.ru
-
-Successfully received certificate.
-Certificate is saved at: /etc/letsencrypt/live/denis-otus.mtdlb.ru/fullchain.pem
-Key is saved at:         /etc/letsencrypt/live/denis-otus.mtdlb.ru/privkey.pem
-This certificate expires on 2026-04-28.
-These files will be updated when the certificate renews.
-Certbot has set up a scheduled task to automatically renew this certificate in the background.
-
-- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-If you like Certbot, please consider supporting our work by:
- * Donating to ISRG / Let's Encrypt:   https://letsencrypt.org/donate
- * Donating to EFF:                    https://eff.org/donate-le
-- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-zubahin@compute-vm-3:~$ 
-```
-
-
-### Шаг 5 Ручная настройка SSL (если не использовался --angie плагин).  Сразу настроим HTTP2
-
-Создаем SSL конфигурацию
-```
-sudo vim /etc/angie/http.d/denis-otus.mtdlb.ru-ssl
-```
-
-И вносим конфигурационный файл:
+### Шаг 5.  Определяем потенциально уязвимые location и добавляем ограничения на подключения (авторизация, limit conn и т.п):
 
 <details>
-          
 ```
+# /etc/angie/http.d/secure-site.conf
+
+# Глобальные лимиты соединений
+limit_conn_zone $binary_remote_addr zone=conn_limit_per_ip:10m;
+limit_req_zone $binary_remote_addr zone=req_limit_per_ip:10m rate=30r/s;
+
+# Зона для медленных соединений
+limit_conn_zone $server_name zone=slow_conn:10m;
 
 server {
-    listen 80;
-    listen [::]:80;
-    server_name denis-otus.mtdlb.ru www.denis-otus.mtdlb.ru;
-    
-    # Редирект на HTTPS
-    return 301 https://$server_name$request_uri;
-    
-    # Сохраняем доступ к ACME challenge для обновления
-    location /.well-known/acme-challenge/ {
-        allow all;
-        root /var/www/denis-otus.mtdlb.ru/html;
-    }
-}
-
-server {
-    listen 443 ssl http2;
-    listen [::]:443 ssl http2;
-    
-    server_name denis-otus.mtdlb.ru www.denis-otus.mtdlb.ru;
-    root /var/www/denis-otus.mtdlb.ru/html;
-
+    listen 443 ssl;
+    listen [::]:443 ssl;
     http2 on;
-    http2_max_concurrent_streams 128;
-    http2_chunk_size 8k;
-
-    # Пути к сертификатам Let's Encrypt
+    
+    server_name denis-otus.mtdlb.ru www.denis-otus.mtdlb.ru;
+    
+    #############################
+    # 1. SSL НАСТРОЙКИ
+    #############################
+    
+    # Пути к сертификатам
     ssl_certificate /etc/letsencrypt/live/denis-otus.mtdlb.ru/fullchain.pem;
     ssl_certificate_key /etc/letsencrypt/live/denis-otus.mtdlb.ru/privkey.pem;
     
-    # Настройки SSL (рекомендованные Let's Encrypt)
-    ssl_session_cache shared:le_nginx_SSL:10m;
-    ssl_session_timeout 1440m;
-    ssl_session_tickets off;
-    
+    # Современные протоколы и шифры
     ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers 'ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256';
     ssl_prefer_server_ciphers off;
     
-    ssl_ciphers "ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:DHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES256-GCM-SHA384";
-    
-    # DH параметры (генерируем если нужно)
-    # sudo openssl dhparam -out /etc/ssl/certs/dhparam.pem 2048
-    # ssl_dhparam /etc/ssl/certs/dhparam.pem;
-    
-    # HSTS (осторожно - нельзя отключить в течение 6 месяцев)
-    # add_header Strict-Transport-Security "max-age=63072000" always;
-    
-    index index.html index.htm;
-    
-    location / {
-        try_files $uri $uri/ =404;
-    }
-    
-    # Разрешаем доступ к файлам Let's Encrypt для обновления
-    location ^~ /.well-known/acme-challenge/ {
-        allow all;
-        root /var/www/denis-otus.mtdlb.ru/html;
-    }
-}
-
-```
-</details>
-
-
-Активируем SSL конфигурацию
-```
-zubahin@compute-vm-3:~$ sudo cp /etc/angie/http.d/arc/denis-otus.mtdlb.ru-ssl.conf /etc/angie/http.d/denis-otus.mtdlb.ru-ssl.conf
-zubahin@compute-vm-3:~$ sudo cp /etc/angie/http.d/denis-otus.mtdlb.ru.conf /etc/angie/http.d/arc/denis-otus.mtdlb.ru-ssl.conf
-zubahin@compute-vm-3:~$ sudo rm /etc/angie/http.d/denis-otus.mtdlb.ru.conf
-```
-
-Открываем HTTPS порт в фаерволе
-```
-sudo ufw allow 443/tcp
-sudo ufw reload
-sudo ufw enable
-```
-
-Проверяем синтаксис
-```
-sudo angie -t
-```
-
-Перезапускаем Angie
-```
-sudo systemctl reload angie
-```
-
-### Шаг 6 Проверяем перенаправление HTTP на HTTPS и работу сайта:
-
-![HTTPS.png](HTTPS.png)
-
-Или используем Curl (проверяем подключение по HTTPS и перенаправление HTTP->HTTPS:
-```
-zubahin@compute-vm-3:~$ curl -I https://denis-otus.mtdlb.ru
-HTTP/1.1 200 OK
-Server: Angie/1.11.2
-Date: Thu, 29 Jan 2026 10:55:44 GMT
-Content-Type: text/html
-Content-Length: 29
-Last-Modified: Fri, 23 Jan 2026 17:42:10 GMT
-Connection: keep-alive
-ETag: "6973b2f2-1d"
-Accept-Ranges: bytes
-
-zubahin@compute-vm-3:~$ curl -I http://denis-otus.mtdlb.ru
-HTTP/1.1 301 Moved Permanently
-Server: Angie/1.11.2
-Date: Thu, 29 Jan 2026 10:55:51 GMT
-Content-Type: text/html
-Content-Length: 169
-Connection: keep-alive
-Location: https://denis-otus.mtdlb.ru/
-```
-
-
-### Шаг 7: Автоматическое обновление сертификатов
-
-Тестируем обновление
-```
-sudo certbot renew --dry-run
-
-Saving debug log to /var/log/letsencrypt/letsencrypt.log
-
-- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-Processing /etc/letsencrypt/renewal/denis-otus.mtdlb.ru.conf
-- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-Account registered.
-Simulating renewal of an existing certificate for denis-otus.mtdlb.ru
-
-- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-Congratulations, all simulated renewals succeeded: 
-  /etc/letsencrypt/live/denis-otus.mtdlb.ru/fullchain.pem (success)
-- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-```
-
-Настраиваем автообновление через systemd timer (рекомендовано для snap)
-```
-sudo vim /etc/systemd/system/certbot-renew.service
-
-```
-
-Содержимое файла сервиса:
-
-```
-[Unit]
-Description=Certbot Renewal
-
-[Service]
-Type=oneshot
-ExecStart=/snap/bin/certbot renew --quiet --post-hook "systemctl reload angie"
-```
-Содержимое файла таймера:
-```
-sudo vim /etc/systemd/system/certbot-renew.timer
-```
-
-```
-[Unit]
-Description=Timer for Certbot Renewal
-
-[Timer]
-OnCalendar=*-*-* 03:00:00
-Persistent=true
-
-[Install]
-WantedBy=timers.target
-
-```
-
-Активируем таймер
-```
-sudo systemctl enable --now certbot-renew.timer
-
-Created symlink /etc/systemd/system/timers.target.wants/certbot-renew.timer → /etc/systemd/system/certbot-renew.timer.
-```
-
-Проверяем таймер
-```
-sudo systemctl list-timers | grep certbot
-
-zubahin@compute-vm-3:~$ sudo systemctl list-timers | grep certbot
-Thu 2026-01-29 18:19:00 UTC       7h -                                   - snap.certbot.renew.timer       snap.certbot.renew.service
-Fri 2026-01-30 03:00:00 UTC      16h -                                   - certbot-renew.timer            certbot-renew.service
-```
-
-Или можно настроить таймер в cron (альтернативный вариант)
-```
-sudo crontab -e
-```
-
-Донастраиваем Cron:
-```
-0 3 * * * /snap/bin/certbot renew --quiet --post-hook "systemctl reload angie"
-```
-
-
-### Шаг 8  Делаем промежуточное сканирование:
-```
-https://www.ssllabs.com/ssltest/analyze.html?d=denis-otus.mtdlb.ru
-```
-
-![Scan01.png](Scan01.png)
-
-
-### Шаг 9  Добавляем в конфигурацию заголовки HSTS и другие дополнительные Security заголовки, а также настроми CSP:
-
-
-# HTTP сервер - редирект на HTTPS
-server {
-    listen 80;
-    listen [::]:80;
-    
-    server_name denis-otus.mtdlb.ru www.denis-otus.mtdlb.ru;
-    
-    # Редирект на HTTPS с сохранением метода запроса
-    return 301 https://$server_name$request_uri;
-    
-    # Сохраняем доступ к ACME challenge для обновления
-    location /.well-known/acme-challenge/ {
-        root /var/www/denis-otus.mtdlb.ru/html;
-        allow all;
-        try_files $uri =404;
-        access_log off;
-    }
-    
-    # Логирование для HTTP (опционально)
-    access_log /var/log/angie/denis-otus.http.access.log;
-    error_log /var/log/angie/denis-otus.http.error.log;
-}
-
-# HTTPS сервер - основная конфигурация
-```
-sudo vim /etc/angie/http.d/denis-otus.mtdlb.ru-ssl2
-```
-
-И вносим конфигурационный файл:
-
-<details>
-
-```
-server {
-    listen 443 ssl http2;
-    listen [::]:443 ssl http2;
-    
-    server_name denis-otus.mtdlb.ru www.denis-otus.mtdlb.ru;
-    
-    root /var/www/denis-otus.mtdlb.ru/html;
-    index index.html index.htm;
-    
-    # Пути к сертификатам Let's Encrypt
-    ssl_certificate /etc/letsencrypt/live/denis-otus.mtdlb.ru/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/denis-otus.mtdlb.ru/privkey.pem;
-    
-    # Протоколы TLS (отключаем старые версии)
-    ssl_protocols TLSv1.2 TLSv1.3;
-    
-    # Современный набор шифров (убираем DHE)
-    ssl_ciphers 'ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256';
-    
-    # Предпочтение серверных шифров можно отключить...
-    # ssl_prefer_server_ciphers off;
-    
-    # Настройки SSL сессий (кеширование)
+    # Оптимизация SSL сессий
     ssl_session_timeout 1d;
     ssl_session_cache shared:SSL:50m;
     ssl_session_tickets off;
     
-    # DH параметры для Perfect Forward Secrecy
-    # Выполняем заранее: sudo openssl dhparam -out /etc/ssl/certs/dhparam.pem 2048  потом раскомментируем:
-    # ssl_dhparam /etc/ssl/certs/dhparam.pem;
+    # DH параметры
+    ssl_dhparam /etc/ssl/certs/dhparam.pem;
     
-    # OCSP Stapling для ускорения проверки сертификатов
-    ssl_stapling on;
-    ssl_stapling_verify on;
-    resolver 8.8.8.8 8.8.4.4 1.1.1.1 valid=300s;
-    resolver_timeout 5s;
-       
-    # HSTS ЗАГОЛОВКИ
-     
-    # ВНИМАНИЕ: Рекомендуется тестировать без includeSubDomains и preload
-    # После уверенности можно добавить:
-    # add_header Strict-Transport-Security "max-age=63072000; includeSubDomains; preload" always;
+    #############################
+    # 2. БАЗОВЫЕ ЛИМИТЫ
+    #############################
     
-    # Начнем с базовой версии:
-    add_header Strict-Transport-Security "max-age=63072000" always;
-
-    # ДОПОЛНИТЕЛЬНЫЕ SECURITY ЗАГОЛОВКИ
-   
-    # Защита от MIME-type sniffing
+    # Ограничение скорости чтения от клиента
+    client_body_timeout 10s;
+    client_header_timeout 10s;
+    
+    # Ограничение размера запросов
+    client_max_body_size 10M;
+    client_body_buffer_size 128k;
+    client_header_buffer_size 1k;
+    large_client_header_buffers 4 8k;
+    
+    # Таймауты для отправки
+    send_timeout 10s;
+    
+    #############################
+    # 3. ЗАЩИТА ОТ МЕДЛЕННЫХ СОЕДИНЕНИЙ
+    #############################
+    
+    # Ограничение времени чтения тела запроса
+    client_body_timeout 5s;
+    
+    # Ограничение времени чтения заголовков
+    client_header_timeout 5s;
+    
+    # Ограничение времени передачи ответа клиенту
+    send_timeout 5s;
+    
+    # Keepalive настройки для предотвращения удержания соединений
+    keepalive_timeout 15s;
+    keepalive_requests 100;
+    
+    # Максимальное количество соединений с одного IP
+    limit_conn conn_limit_per_ip 20;
+    
+    # Защита от Slowloris атак
+    limit_conn slow_conn 1000;
+    
+    #############################
+    # 4. RATE LIMITING
+    #############################
+    
+    # Общий rate limiting
+    limit_req zone=req_limit_per_ip burst=50 nodelay;
+    limit_req_status 429;
+    
+    # Отдельные зоны для особых location
+    limit_req_zone $binary_remote_addr zone=login_limit:10m rate=5r/m;
+    limit_req_zone $binary_remote_addr zone=api_limit:10m rate=10r/s;
+    limit_req_zone $binary_remote_addr zone=static_limit:10m rate=100r/s;
+    
+    #############################
+    # 5. SECURITY HEADERS
+    #############################
+    
+    # HSTS - принудительное использование HTTPS
+    add_header Strict-Transport-Security "max-age=63072000; includeSubDomains; preload" always;
+    
+    # Защита от MIME sniffing
     add_header X-Content-Type-Options "nosniff" always;
-    
-    # Защита от XSS (устарело в современных браузерах, но полезно для старых)
-    add_header X-XSS-Protection "1; mode=block" always;
     
     # Защита от clickjacking
     add_header X-Frame-Options "SAMEORIGIN" always;
     
-    # Referrer Policy
+    # XSS защита (устарело, но для старых браузеров)
+    add_header X-XSS-Protection "1; mode=block" always;
+    
+    # Referrer policy
     add_header Referrer-Policy "strict-origin-when-cross-origin" always;
     
-    # Permissions Policy (Feature Policy)
+    # Permissions policy
     add_header Permissions-Policy "geolocation=(), microphone=(), camera=(), payment=()" always;
     
-    # Content Security Policy (настройте под ваш сайт!)
-    # Для начала можно использовать report-only режим
-    # add_header Content-Security-Policy-Report-Only "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; font-src 'self'; connect-src 'self';" always;
+    # CSP - политика безопасности контента
+    add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self';" always;
     
-    # Для простого статического сайта рекомендуется:
-    add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self';" always;
+    #############################
+    # 6. НАСТРОЙКИ КЭШИРОВАНИЯ
+    #############################
     
-  
-    # ОПТИМИЗАЦИЯ И БЕЗОПАСНОСТЬ
-  
+    # Кэш для прокси
+    proxy_cache_path /var/cache/angie levels=1:2 keys_zone=proxy_cache:100m 
+                     max_size=1g inactive=60m use_temp_path=off;
     
-    # Безопасные заголовки для статических файлов
-    location ~* \.(jpg|jpeg|png|gif|ico|css|js|svg|woff|woff2|ttf|eot)$ {
+    # Кэш для статики
+    proxy_cache_path /var/cache/angie/static levels=1:2 keys_zone=static_cache:50m 
+                     max_size=500m inactive=365d use_temp_path=off;
+    
+    # Ключи кэширования
+    proxy_cache_key "$scheme$request_method$host$request_uri";
+    proxy_cache_valid 200 302 10m;
+    proxy_cache_valid 404 1m;
+    
+    # Байпас кэша для определенных условий
+    proxy_cache_bypass $cookie_nocache $arg_nocache;
+    proxy_no_cache $cookie_nocache $arg_nocache;
+    
+    #############################
+    # 7. ПРОКСИРОВАНИЕ
+    #############################
+    
+    # Основной location
+    location / {
+        proxy_pass http://127.0.0.1:8080;
+        
+        # Заголовки для правильной работы приложений
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Host $host;
+        proxy_set_header X-Forwarded-Port $server_port;
+        
+        # Исправление редиректов
+        proxy_redirect http:// $scheme://;
+        proxy_redirect ~^http://[^:]+:(\d+)/(.*)$ $scheme://$host/$2;
+        
+        # Оптимизации
+        proxy_buffering on;
+        proxy_buffer_size 4k;
+        proxy_buffers 8 4k;
+        proxy_busy_buffers_size 8k;
+        
+        # Таймауты
+        proxy_connect_timeout 5s;
+        proxy_send_timeout 10s;
+        proxy_read_timeout 10s;
+        
+        # Включение кэширования
+        proxy_cache proxy_cache;
+        proxy_cache_lock on;
+        proxy_cache_lock_timeout 5s;
+        proxy_cache_use_stale error timeout updating http_500 http_502 http_503 http_504;
+        
+        # Заголовки кэша
+        add_header X-Cache-Status $upstream_cache_status;
+        
+        # Rate limiting для динамического контента
+        limit_req zone=req_limit_per_ip burst=30 delay=20;
+    }
+    
+    #############################
+    # 8. СТАТИЧЕСКИЕ ФАЙЛЫ
+    #############################
+    
+    location ~* \.(jpg|jpeg|png|gif|ico|css|js|svg|woff|woff2|ttf|eot|webp|avif)$ {
+        proxy_pass http://127.0.0.1:8080;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        
+        # Агрессивное кэширование статики
         expires 1y;
         add_header Cache-Control "public, immutable";
         add_header X-Content-Type-Options "nosniff";
+        
+        # Кэширование на стороне Angie
+        proxy_cache static_cache;
+        proxy_cache_valid 200 302 365d;
+        proxy_cache_valid 404 1d;
+        proxy_cache_use_stale error timeout updating http_500 http_502 http_503 http_504;
+        
+        # Разрешаем больше параллельных запросов к статике
+        limit_req zone=static_limit burst=200 nodelay;
+        
+        # Более быстрые таймауты для статики
+        proxy_connect_timeout 3s;
+        proxy_read_timeout 5s;
     }
     
-    # Разрешаем доступ к файлам Let's Encrypt для обновления
+    #############################
+    # 9. ЗАЩИЩЕННЫЕ LOCATION
+    #############################
+    
+    # Защита входа в систему
+    location ~ ^/(wp-login|login|admin|administrator|dashboard) {
+        proxy_pass http://127.0.0.1:8080;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        
+        # Строгий rate limiting для логина
+        limit_req zone=login_limit burst=3 nodelay;
+        limit_req_status 429;
+        
+        # HTTP базовая авторизация
+        auth_basic "Restricted Area";
+        auth_basic_user_file /etc/angie/htpasswd;
+        
+        # Ограничение по IP
+        allow 127.0.0.1;
+        allow 158.160.82.102; # Ваш IP
+        deny all;
+        
+        # Логирование попыток доступа
+        access_log /var/log/angie/auth.log;
+        
+        # Отключаем кэш для защищенных зон
+        proxy_no_cache 1;
+        proxy_cache_bypass 1;
+    }
+    
+    # API endpoint protection
+    location ~ ^/api/ {
+        proxy_pass http://127.0.0.1:8080;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        
+        # Rate limiting для API
+        limit_req zone=api_limit burst=20 nodelay;
+        
+        # Заголовки для API
+        add_header X-API-Version "1.0" always;
+        add_header X-RateLimit-Limit "10" always;
+        add_header X-RateLimit-Remaining "9" always;
+        
+        # Кэширование API ответов
+        proxy_cache proxy_cache;
+        proxy_cache_valid 200 10s;
+        proxy_cache_methods GET HEAD;
+        proxy_cache_key "$scheme$request_method$host$request_uri$is_args$args";
+    }
+    
+    #############################
+    # 10. ЗАЩИТА ОТ БОТОВ И СКАНЕРОВ
+    #############################
+    
+    # Блокировка известных сканеров
+    if ($http_user_agent ~* (nmap|nikto|sqlmap|w3af|acunetix|openvas|nessus|metasploit|dirbuster|wapiti|burpsuite|hydra)) {
+        return 444;
+    }
+    
+    # Блокировка ботов
+    if ($http_user_agent ~* (bot|crawl|spider|scraper|python|java|curl|wget|libwww)) {
+        return 444;
+    }
+    
+    # Блокировка пустых User-Agent
+    if ($http_user_agent = "") {
+        return 444;
+    }
+    
+    # Блокировка нестандартных методов
+    if ($request_method !~ ^(GET|HEAD|POST|PUT|DELETE|PATCH|OPTIONS)$) {
+        return 444;
+    }
+    
+    # Блокировка чувствительных файлов
+    location ~* \.(log|sql|conf|config|yml|yaml|env|ini|bak|backup|tar|gz|zip|swp)$ {
+        deny all;
+        return 404;
+    }
+    
+    # Блокировка скрытых файлов
+    location ~ /\. {
+        deny all;
+        return 404;
+    }
+    
+    #############################
+    # 11. LET'S ENCRYPT
+    #############################
+    
+    location ^~ /.well-known/acme-challenge/ {
+        root /var/www/denis-otus.mtdlb.ru/html;
+        allow all;
+        try_files $uri =404;
+        access_log off;
+        expires off;
+    }
+    
+    #############################
+    # 12. КАСТОМНЫЕ ОШИБКИ
+    #############################
+    
+    error_page 429 /429.html;
+    error_page 444 /444.html;
+    error_page 403 /403.html;
+    error_page 404 /404.html;
+    
+    location = /429.html {
+        internal;
+        return 429 '{"error": "Too Many Requests", "message": "Rate limit exceeded. Please try again later."}';
+    }
+    
+    location = /444.html {
+        internal;
+        return 444;
+    }
+    
+    location = /403.html {
+        internal;
+        return 403 '{"error": "Forbidden", "message": "Access denied"}';
+    }
+    
+    #############################
+    # 13. ЛОГИРОВАНИЕ
+    #############################
+    
+    # Формат лога с детальной информацией
+    log_format security '$remote_addr - $remote_user [$time_local] '
+                       '"$request" $status $body_bytes_sent '
+                       '"$http_referer" "$http_user_agent" '
+                       'rt=$request_time uct=$upstream_connect_time '
+                       'urt=$upstream_response_time '
+                       'cache=$upstream_cache_status '
+                       'limit_req_status=$limit_req_status '
+                       'limit_conn_status=$limit_conn_status';
+    
+    # Основной лог
+    access_log /var/log/angie/access.log security;
+    error_log /var/log/angie/error.log warn;
+    
+    # Отдельные логи для мониторинга
+    access_log /var/log/angie/security.log security if=$limit_req_status;
+    access_log /var/log/angie/slow.log security if=$request_time>5;
+}
+
+#############################
+# HTTP REDIRECT
+#############################
+
+server {
+    listen 80;
+    listen [::]:80;
+    server_name denis-otus.mtdlb.ru www.denis-otus.mtdlb.ru;
+    
+    # Let's Encrypt
     location ^~ /.well-known/acme-challenge/ {
         root /var/www/denis-otus.mtdlb.ru/html;
         allow all;
@@ -782,120 +643,10 @@ server {
         access_log off;
     }
     
-    # Основное местоположение
+    # Редирект на HTTPS
     location / {
-        try_files $uri $uri/ =404;
-        
-        # Защитные заголовки для всех остальных запросов
-        add_header X-Frame-Options "SAMEORIGIN" always;
-        add_header X-Content-Type-Options "nosniff" always;
+        return 301 https://$server_name$request_uri;
     }
-    
-    # Блокируем доступ к скрытым файлам (.htaccess, .git и т.д.)
-    location ~ /\. {
-        deny all;
-        access_log off;
-        log_not_found off;
-        return 404;
-    }
-    
-    # Блокируем доступ к чувствительным файлам
-    location ~* (\.log$|\.sql$|\.env$|composer\.json$|composer\.lock$) {
-        deny all;
-        return 404;
-    }
-    
-    # Отключаем ненужные HTTP методы
-    if ($request_method !~ ^(GET|HEAD|POST)$) {
-        return 405;
-    }
-    
-    # Логирование
-    access_log /var/log/angie/denis-otus.https.access.log;
-    error_log /var/log/angie/denis-otus.https.error.log;
 }
-
 ```
 </details>
-
-
-Сгенерируем DH параметры (рекомендую 2048 бит для баланса безопасности и производительности)
-```
-sudo openssl dhparam -out /etc/ssl/certs/dhparam.pem 2048
-```
-Раскомментируем строку с ssl_dhparam в конфигурации
-ssl_dhparam /etc/ssl/certs/dhparam.pem;
-
-Проверяем синтаксис
-```
-sudo angie -t
-```
-Перезапускаем Angie
-```
-sudo systemctl reload angie
-```
-
-
-### Шаг 10  Включаем HTTP3:
-
-Для этого в конфигурацию http.d нужно добавить:
-
-```
-    # HTTP/3 НАСТРОЙКИ
-       
-    # Заголовок для поддержки HTTP/3
-    add_header Alt-Svc 'h3=":443"; ma=86400, h3-29=":443"; ma=86400' always;
-    
-    # Включение HTTP/3
-    http3 on;
-    http3_hq on;  # Для совместимости с старыми клиентами QUIC
-    
-    # Настройки QUIC
-    quic_retry on;
-    http3_max_concurrent_streams 128;
-    http3_stream_buffer_size 65536;
-```
-
-Не забываем разрешить 443 UDP (для HTTP/3):
-
-```
-sudo ufw allow 443/udp
-sudo ufw reload
-```
-
-Также добавляем в основной конфиг строки оптимизации Quic:
-
-```
-sudo vim /etc/angie/angie.conf
-```
-
-```
-    quic_retry on;
-    http3_max_table_capacity 65536;
-    http3_max_blocked_streams 128;
-```
-
-### Опциональные команды (справочно)
-
-Просмотр всех доменов
-```
-sudo certbot certificates
-```
-Добавление нового домена к существующему сертификату
-```
-sudo certbot certonly --webroot \
-    --webroot-path /var/www/example.com/html \
-    -d example.com -d www.example.com -d newsubdomain.example.com
-```
-Отзыв сертификата
-```
-sudo certbot revoke --cert-name example.com
-```
-Удаление сертификата
-```
-sudo certbot delete --cert-name example.com
-```
-Просмотр логов Certbot
-```
-sudo tail -f /var/log/letsencrypt/letsencrypt.log
-```
