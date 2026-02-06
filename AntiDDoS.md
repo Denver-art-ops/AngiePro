@@ -264,11 +264,12 @@ CONTAINER ID   IMAGE              COMMAND                  CREATED          STAT
 6 Кэширование статики
 
 
-### Шаг 5.  Определяем потенциально уязвимые location и добавляем ограничения на подключения (авторизация, limit conn и т.п):
+### Шаг 5.  Определяем потенциально уязвимые location (API, админка, в меньшей степени статические файлы) и добавляем ограничения на подключения (авторизация, limit conn и т.п):
 
 <details>
+  
 ```
-# /etc/angie/http.d/secure-site.conf
+# /etc/angie/http.d/secure.conf
 
 # Глобальные лимиты соединений
 limit_conn_zone $binary_remote_addr zone=conn_limit_per_ip:10m;
@@ -283,11 +284,9 @@ server {
     http2 on;
     
     server_name denis-otus.mtdlb.ru www.denis-otus.mtdlb.ru;
-    
-    #############################
+ 
     # 1. SSL НАСТРОЙКИ
-    #############################
-    
+   
     # Пути к сертификатам
     ssl_certificate /etc/letsencrypt/live/denis-otus.mtdlb.ru/fullchain.pem;
     ssl_certificate_key /etc/letsencrypt/live/denis-otus.mtdlb.ru/privkey.pem;
@@ -305,73 +304,59 @@ server {
     # DH параметры
     ssl_dhparam /etc/ssl/certs/dhparam.pem;
     
-    #############################
-    # 2. БАЗОВЫЕ ЛИМИТЫ
-    #############################
-    
-    # Ограничение скорости чтения от клиента
-    client_body_timeout 10s;
-    client_header_timeout 10s;
-    
+     # 2. БАЗОВЫЕ ЛИМИТЫ
+        
     # Ограничение размера запросов
     client_max_body_size 10M;
     client_body_buffer_size 128k;
     client_header_buffer_size 1k;
     large_client_header_buffers 4 8k;
     
-    # Таймауты для отправки
-    send_timeout 10s;
-    
-    #############################
+     
     # 3. ЗАЩИТА ОТ МЕДЛЕННЫХ СОЕДИНЕНИЙ
-    #############################
-    
+       
     # Ограничение времени чтения тела запроса
-    client_body_timeout 5s;
+    client_body_timeout 5s;  # Максимальное время для передачи тела запроса от клиента. Если клиент не успевает за 5 секунд - соединение разрывается.
     
     # Ограничение времени чтения заголовков
-    client_header_timeout 5s;
+    client_header_timeout 5s;   # Максимальное время для получения заголовков от клиента. Защита от Slowloris-атак.
     
     # Ограничение времени передачи ответа клиенту
-    send_timeout 5s;
+    send_timeout 5s; #  Максимальное время для отправки ответа клиенту. Если клиент не читает - соединение закрывается.
     
     # Keepalive настройки для предотвращения удержания соединений
-    keepalive_timeout 15s;
-    keepalive_requests 100;
+    keepalive_timeout 15s; # Время удержания keepalive соединения. Короткий таймаут освобождает соединения быстрее.
+    keepalive_requests 100;  # Задает максимальное число запросов, которые можно сделать по одному keep-alive соединению. После того, как сделано максимальное число запросов, соединение закрывается. ((по умолчанию 1000)
     
     # Максимальное количество соединений с одного IP
-    limit_conn conn_limit_per_ip 20;
+    limit_conn conn_limit_per_ip 100; # Максимально 100 одновременных соединений с одного IP.
     
     # Защита от Slowloris атак
-    limit_conn slow_conn 1000;
-    
-    #############################
-    # 4. RATE LIMITING
-    #############################
+    limit_conn slow_conn 1000;  # Глобальное ограничение на медленные соединения.
+
+     # 4. RATE LIMITING
     
     # Общий rate limiting
-    limit_req zone=req_limit_per_ip burst=50 nodelay;
-    limit_req_status 429;
+    limit_req zone=req_limit_per_ip burst=50 nodelay; #  limit_req zone создает зоны для ограничений  burst - разрешает кратковременные всплески nodelay - немедленное применение ограничений
+    limit_req_status 429;  # Позволяет переопределить код ответа, используемый при отклонении запросов.
     
     # Отдельные зоны для особых location
-    limit_req_zone $binary_remote_addr zone=login_limit:10m rate=5r/m;
-    limit_req_zone $binary_remote_addr zone=api_limit:10m rate=10r/s;
-    limit_req_zone $binary_remote_addr zone=static_limit:10m rate=100r/s;
+    limit_req_zone $binary_remote_addr zone=login_limit:10m rate=5r/m;  # создаем зону login_limit  5 запросов в секунду
+    limit_req_zone $binary_remote_addr zone=api_limit:10m rate=10r/s; # создаем зону login_api  10 запросов в секунду
+    limit_req_zone $binary_remote_addr zone=static_limit:10m rate=100r/s;  # создаем зону static_limit  100 запросов в секунду
     
-    #############################
     # 5. SECURITY HEADERS
-    #############################
-    
-    # HSTS - принудительное использование HTTPS
+   
+    # HSTS - принудительное использование HTTPS  (принудительный HTTPS на 2 года)
     add_header Strict-Transport-Security "max-age=63072000; includeSubDomains; preload" always;
     
     # Защита от MIME sniffing
     add_header X-Content-Type-Options "nosniff" always;
     
-    # Защита от clickjacking
+    # Защита от clickjacking ()
     add_header X-Frame-Options "SAMEORIGIN" always;
     
-    # XSS защита (устарело, но для старых браузеров)
+    # XSS защита (устарело,для старых браузеров)
     add_header X-XSS-Protection "1; mode=block" always;
     
     # Referrer policy
@@ -380,13 +365,11 @@ server {
     # Permissions policy
     add_header Permissions-Policy "geolocation=(), microphone=(), camera=(), payment=()" always;
     
-    # CSP - политика безопасности контента
+    # CSP - политика безопасности контента (защита от XSS через whitelist источников)
     add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self';" always;
     
-    #############################
     # 6. НАСТРОЙКИ КЭШИРОВАНИЯ
-    #############################
-    
+       
     # Кэш для прокси
     proxy_cache_path /var/cache/angie levels=1:2 keys_zone=proxy_cache:100m 
                      max_size=1g inactive=60m use_temp_path=off;
@@ -404,9 +387,7 @@ server {
     proxy_cache_bypass $cookie_nocache $arg_nocache;
     proxy_no_cache $cookie_nocache $arg_nocache;
     
-    #############################
     # 7. ПРОКСИРОВАНИЕ
-    #############################
     
     # Основной location
     location / {
@@ -419,10 +400,6 @@ server {
         proxy_set_header X-Forwarded-Proto $scheme;
         proxy_set_header X-Forwarded-Host $host;
         proxy_set_header X-Forwarded-Port $server_port;
-        
-        # Исправление редиректов
-        proxy_redirect http:// $scheme://;
-        proxy_redirect ~^http://[^:]+:(\d+)/(.*)$ $scheme://$host/$2;
         
         # Оптимизации
         proxy_buffering on;
@@ -448,9 +425,7 @@ server {
         limit_req zone=req_limit_per_ip burst=30 delay=20;
     }
     
-    #############################
     # 8. СТАТИЧЕСКИЕ ФАЙЛЫ
-    #############################
     
     location ~* \.(jpg|jpeg|png|gif|ico|css|js|svg|woff|woff2|ttf|eot|webp|avif)$ {
         proxy_pass http://127.0.0.1:8080;
@@ -477,9 +452,7 @@ server {
         proxy_read_timeout 5s;
     }
     
-    #############################
     # 9. ЗАЩИЩЕННЫЕ LOCATION
-    #############################
     
     # Защита входа в систему
     location ~ ^/(wp-login|login|admin|administrator|dashboard) {
@@ -531,9 +504,7 @@ server {
         proxy_cache_key "$scheme$request_method$host$request_uri$is_args$args";
     }
     
-    #############################
     # 10. ЗАЩИТА ОТ БОТОВ И СКАНЕРОВ
-    #############################
     
     # Блокировка известных сканеров
     if ($http_user_agent ~* (nmap|nikto|sqlmap|w3af|acunetix|openvas|nessus|metasploit|dirbuster|wapiti|burpsuite|hydra)) {
@@ -567,10 +538,8 @@ server {
         return 404;
     }
     
-    #############################
     # 11. LET'S ENCRYPT
-    #############################
-    
+     
     location ^~ /.well-known/acme-challenge/ {
         root /var/www/denis-otus.mtdlb.ru/html;
         allow all;
@@ -579,10 +548,8 @@ server {
         expires off;
     }
     
-    #############################
     # 12. КАСТОМНЫЕ ОШИБКИ
-    #############################
-    
+      
     error_page 429 /429.html;
     error_page 444 /444.html;
     error_page 403 /403.html;
@@ -603,10 +570,8 @@ server {
         return 403 '{"error": "Forbidden", "message": "Access denied"}';
     }
     
-    #############################
     # 13. ЛОГИРОВАНИЕ
-    #############################
-    
+      
     # Формат лога с детальной информацией
     log_format security '$remote_addr - $remote_user [$time_local] '
                        '"$request" $status $body_bytes_sent '
@@ -626,9 +591,7 @@ server {
     access_log /var/log/angie/slow.log security if=$request_time>5;
 }
 
-#############################
 # HTTP REDIRECT
-#############################
 
 server {
     listen 80;
@@ -650,3 +613,31 @@ server {
 }
 ```
 </details>
+
+### Шаг 6. Создаем файлы для авторизации и кеша и заодно установим apache2-utils:
+
+```
+# Создаем директории для кэша (уже были созданы ранее)
+sudo mkdir -p /var/cache/angie
+sudo chown -R angie:angie /var/cache/angie
+
+# Создаем файл с паролями для HTTP авторизации
+sudo apt-get update
+sudo apt-get install apache2-utils
+
+sudo htpasswd -c /etc/angie/htpasswd admin
+# Вводим пароль при запросе
+
+# Можно добавить дополнительных пользователей
+sudo htpasswd /etc/angie/htpasswd user1
+sudo htpasswd /etc/angie/htpasswd user2
+
+# Настраиваем права на файл с паролями
+sudo chown angie:angie /etc/angie/htpasswd
+sudo chmod 640 /etc/angie/htpasswd
+
+# Директории для статики Let's Encrypt (уже созданы были ранее):
+sudo mkdir -p /var/www/denis-otus.mtdlb.ru/html/.well-known/acme-challenge
+sudo chown -R angie:angie /var/www/denis-otus.mtdlb.ru/html
+
+```
