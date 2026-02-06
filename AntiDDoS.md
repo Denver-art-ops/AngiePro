@@ -100,12 +100,13 @@ max_execution_time = 300
 
 ```
 server {
-    listen 443 ssl http2;
-    listen [::]:443 ssl http2;
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    http2 on;
     
     server_name denis-otus.mtdlb.ru www.denis-otus.mtdlb.ru;
     
-    # SSL конфигурация (остается без изменений)
+    # SSL конфигурация
     ssl_certificate /etc/letsencrypt/live/denis-otus.mtdlb.ru/fullchain.pem;
     ssl_certificate_key /etc/letsencrypt/live/denis-otus.mtdlb.ru/privkey.pem;
     ssl_protocols TLSv1.2 TLSv1.3;
@@ -114,16 +115,16 @@ server {
     ssl_session_cache shared:SSL:50m;
     ssl_session_tickets off;
     ssl_dhparam /etc/ssl/certs/dhparam.pem;
-    ssl_stapling on;
-    ssl_stapling_verify on;
-    resolver 8.8.8.8 8.8.4.4 1.1.1.1 valid=300s;
-    resolver_timeout 5s;
-        
-    # Корневая директория теперь не нужна для статики - ее убираем
-    # WordPress будет обслуживать файлы через контейнер
     
-    # Проксирование на WordPress контейнер
-location / {
+    # Security headers
+    add_header Strict-Transport-Security "max-age=63072000" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-Frame-Options "SAMEORIGIN" always;
+    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+    add_header Permissions-Policy "geolocation=(), microphone=(), camera=(), payment=()" always;
+    
+    # Проксирование на WordPress
+    location / {
         proxy_pass http://127.0.0.1:8080;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
@@ -131,14 +132,23 @@ location / {
         proxy_set_header X-Forwarded-Proto $scheme;
         proxy_set_header X-Forwarded-Host $host;
         
-        # Простые настройки без сложных опций
-        proxy_redirect off;
+        # Критически важные настройки для WordPress
+        proxy_redirect http://127.0.0.1:8080/ https://$host/;
+        proxy_redirect http://$host:8080/ https://$host/;
+        proxy_redirect http://$host/ https://$host/;
         
-        # Важно: Добавляем заголовок для WordPress
-        proxy_set_header HTTPS on;
+        # Оптимизации
+        proxy_buffering on;
+        proxy_buffer_size 128k;
+        proxy_buffers 256 16k;
+        proxy_busy_buffers_size 256k;
+        proxy_temp_file_write_size 256k;
+        proxy_connect_timeout 90;
+        proxy_send_timeout 90;
+        proxy_read_timeout 90;
     }
     
-    # Кэширование статических файлов WordPress
+    # Кэширование статических файлов
     location ~* \.(jpg|jpeg|png|gif|ico|css|js|svg|woff|woff2|ttf|eot|webp)$ {
         proxy_pass http://127.0.0.1:8080;
         proxy_set_header Host $host;
@@ -149,14 +159,9 @@ location / {
         expires 1y;
         add_header Cache-Control "public, immutable";
         add_header X-Content-Type-Options "nosniff";
-        
-        # Более быстрая обработка статики
-        proxy_buffering on;
-        proxy_cache_valid 200 301 302 30d;
-        proxy_cache_use_stale error timeout updating http_500 http_502 http_503 http_504;
     }
     
-    # Локация для Let's Encrypt сохраняется
+    # Let's Encrypt
     location ^~ /.well-known/acme-challenge/ {
         root /var/www/denis-otus.mtdlb.ru/html;
         allow all;
@@ -164,29 +169,15 @@ location / {
         access_log off;
     }
     
-    # Блокировка доступа к системным файлам WordPress
-    location ~* /(wp-config\.php|readme\.html|license\.txt|wp-includes/.*|wp-admin/install\.php) {
-        deny all;
-        return 404;
-    }
-    
-    # Блокируем доступ к скрытым файлам
-    location ~ /\. {
-        deny all;
-        access_log off;
-        log_not_found off;
-        return 404;
-    }
-    
-    # Блокируем доступ к чувствительным файлам
-    location ~* (\.log$|\.sql$|\.env$|composer\.json$|composer\.lock$) {
+    # Блокировка нежелательных запросов
+    location ~* /(wp-config\.php|xmlrpc\.php|readme\.html|license\.txt) {
         deny all;
         return 404;
     }
     
     # Логирование
-    access_log /var/log/angie/denis-otus.https.access.log extended;
-    error_log /var/log/angie/denis-otus.https.error.log notice;
+    access_log /var/log/angie/wordpress.access.log;
+    error_log /var/log/angie/wordpress.error.log warn;
 }
 
 # Перенаправление HTTP -> HTTPS
@@ -195,14 +186,12 @@ server {
     listen [::]:80;
     server_name denis-otus.mtdlb.ru www.denis-otus.mtdlb.ru;
     
-    # Let's Encrypt verification
     location ^~ /.well-known/acme-challenge/ {
         root /var/www/denis-otus.mtdlb.ru/html;
         allow all;
         try_files $uri =404;
     }
     
-    # Перенаправляем все остальное на HTTPS
     location / {
         return 301 https://$server_name$request_uri;
     }
