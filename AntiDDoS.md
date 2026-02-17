@@ -432,12 +432,12 @@ proxy_set_header Host $host;
     # 9. ЗАЩИЩЕННЫЕ LOCATION
 
     # Защита входа в систему
-    location = /wp-login.php {
+    location = /wp-login.php {   # на нее перенаправляется админка со стороны wordpress
         proxy_pass http://127.0.0.1:8080;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-Proto $scheme;
-# Строгий rate limiting для логина
+    # Строгий rate limiting для логина
         limit_req zone=login_limit burst=3 nodelay;
         limit_req_status 429;
 
@@ -445,7 +445,7 @@ proxy_set_header Host $host;
         auth_basic "Restricted Area";
         auth_basic_user_file /etc/angie/htpasswd;
 
-        # Ограничение по IP
+        # Ограничение по IP   # для тестов отключено,можно включать
         #allow 127.0.0.1;
         #allow 158.160.82.102; # Ваш IP
         #deny all;
@@ -571,40 +571,28 @@ proxy_set_header Host $host;
     access_log /var/log/angie/security.log security if=$limit_req_status;
     access_log /var/log/angie/slow.log security if=$request_time>5;
 }
+14. HTTP REDIRECT
+
+server {
+    listen 80;
+    listen [::]:80;
+    server_name denis-otus.mtdlb.ru www.denis-otus.mtdlb.ru;
+
+    # Let's Encrypt
+    location ^~ /.well-known/acme-challenge/ {
+        root /var/www/denis-otus.mtdlb.ru/html;
+        allow all;
+        try_files $uri =404;
+        access_log off;
+    }
+
+    # Редирект на HTTPS
+    location / {
+        return 301 https://$server_name$request_uri;
+    }
 }
 
-    # 12. КАСТОМНЫЕ ОШИБКИ
-
-    error_page 429 =429 /429.html;
-    error_page 444 =444 /444.html;
-    error_page 403 =403 /403.html;
-    error_page 404 =404 /404.html;
-
-    location = /429.html {
-        internal;
-        return 429 '{"error": "Too Many Requests", "message": "Rate limit exceeded. Please try again later."}';
-    }
-
-    location = /444.html {
-        internal;
-        return 444;
-    }
-
-    location = /403.html {
-        return 403 '{"error": "Forbidden", "message": "Access denied"}';
-    }
-
-    # 13. ЛОГИРОВАНИЕ
-
-    # Основной лог (использует формат security из основного конфига)
-    access_log /var/log/angie/access.log security;
-    error_log /var/log/angie/error.log warn;
-
-    # Отдельные логи для мониторинга
-    access_log /var/log/angie/security.log security if=$limit_req_status;
-    access_log /var/log/angie/slow.log security if=$request_time>5;
-}
-
+   
 ```
 </details>
 
@@ -620,7 +608,7 @@ sudo apt-get update
 sudo apt-get install apache2-utils
 
 sudo htpasswd -c /etc/angie/htpasswd admin
-# Вводим пароль при запросе
+# Вводим пароль при запросе  (например Otus2026!)
 
 # Можно добавить дополнительных пользователей
 sudo htpasswd /etc/angie/htpasswd user1
@@ -635,3 +623,23 @@ sudo mkdir -p /var/www/denis-otus.mtdlb.ru/html/.well-known/acme-challenge
 sudo chown -R angie:angie /var/www/denis-otus.mtdlb.ru/html
 
 ```
+
+###  Шаг 7 Проверяем ограничения на rate-limit и пароль на вход в админку
+
+Сначала заходим на саму страничку и видим, что все работает:
+
+
+Пробуем зайти в админку: https://denis-otus.mtdlb.ru/wp-admin/
+
+
+Видим, как срабатывает ограничение (вход по логину/паролю)
+
+
+Пробуем несколько раз подключиться -попадаем на rate-limit:
+
+
+Проверяем ограничение по IP (в конфиге раскомментируем строчку):
+
+Включим  подключения только с российских IP. Используем модуль geoip (расскомментируем модуль в конфигурации)
+
+
