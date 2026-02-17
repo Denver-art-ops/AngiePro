@@ -1140,3 +1140,89 @@ sudo angie -t
 ```
 sudo systemctl reload angie
 ```
+
+Установка FailBan:
+```
+sudo apt update
+sudo apt install fail2ban -y
+```
+
+Добавляем FailBan в перезагрузку:
+```
+sudo systemctl enable --now fail2ban
+```
+
+Создайем файл /etc/fail2ban/filter.d/wordpress-angie.conf:
+
+```
+[Definition]
+# Описание: определяем неудачные попытки входа в админку WordPress
+# Ищем HTTP-коды 401 (Unauthorized) или 403 (Forbidden) для основных URL
+failregex = ^<HOST> .* "(GET|POST) /wp-login\.php" HTTP/\d\.\d" 40[13]
+            ^<HOST> .* "(GET|POST) /wp-admin/.*" HTTP/\d\.\d" 40[13]
+            ^<HOST> .* "(GET|POST) /xmlrpc\.php" HTTP/\d\.\d" 40[13]
+
+# Игнорировать можно свои внутренние IP, если нужно
+ignoreregex =
+
+
+#Пояснение:
+
+#^<HOST> — стандартный маркер fail2ban, обозначающий IP в начале строки. Он соответствует логам, где IP стоит первым полем. 
+#В  формате security скорее всего так и есть.
+#Регулярка ловит запросы к /wp-login.php, любому пути внутри /wp-admin/ и /xmlrpc.php с ответами 401 или 403.
+```
+
+Создайем файл /etc/fail2ban/jail.local (он переопределяет настройки по умолчанию):
+
+```
+[DEFAULT]
+# Действие по умолчанию (блокировка всех портов)
+banaction = iptables-allports
+
+# Время блокировки (1 час)
+bantime = 3600
+
+# Время, за которое считаются попытки (10 минут)
+findtime = 600
+
+# Максимальное число попыток за findtime
+maxretry = 5
+
+# Игнорировать собственные IP (можно добавить адрес вашего сервера)
+ignoreip = 127.0.0.1/8 ::1
+
+# Специфичная тюрьма для WordPress
+[wordpress-angie]
+enabled = true
+# Путь к лог-файлу Angie (у вас общий access.log)
+logpath = /var/log/angie/access.log
+# Используемый фильтр
+filter = wordpress-angie
+# Параметры можно переопределить (оставляем общие)
+port = http,https
+```
+
+Проверяем настройки:
+
+Проверяем, нет ли синтаксических ошибок
+```
+sudo fail2ban-client -t
+```
+Перезапускаем fail2ban
+```
+sudo systemctl restart fail2ban
+```
+Проверяем статус тюрьмы
+```
+zubahin@compute-vm-3:/etc/angie/http.d$ sudo fail2ban-client status wordpress-angie
+Status for the jail: wordpress-angie
+|- Filter
+|  |- Currently failed: 0
+|  |- Total failed:     0
+|  `- Journal matches:
+`- Actions
+   |- Currently banned: 0
+   |- Total banned:     0
+   `- Banned IP list:
+```
