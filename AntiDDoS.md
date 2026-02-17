@@ -645,4 +645,498 @@ sudo chown -R angie:angie /var/www/denis-otus.mtdlb.ru/html
 ###  Шаг 8 Установим Fail2ban и начнем его использовать.  А также добавим ограничения на подключения только с российских IP (GeoIP):
 Включим  подключения только с российских IP. Используем модуль geoip (расскомментируем модуль в конфигурации)
 
+Устанавливаем сам файл базы
+```
+sudo apt install geoip-database
+```
 
+Активируем модуль GeoIP в основном конфиге Angie:
+
+```
+# Загружаем модуль GeoIP
+load_module modules/ngx_http_geoip_module.so;
+...
+
+http {
+....
+
+    # Путь к базе стран GeoIP
+    geoip_country /usr/share/GeoIP/GeoIP.dat;
+
+    # Создаём переменную $allowed_country: 1 для RU, 0 для остальных
+    geo $allowed_country {
+        default 0;
+        $geoip_country_code RU 1;
+    }
+
+    # ... остальные настройки http (логи, лимиты, кэши и т.д.)
+}
+```
+
+или полная конфигурация:
+
+<detail>
+
+```
+user  angie;
+worker_processes  auto;
+worker_rlimit_nofile 65536;
+
+# Загружаем модуль GeoIP
+load_module modules/ngx_http_geoip_module.so;
+
+
+error_log  /var/log/angie/error.log notice;
+pid        /run/angie.pid;
+
+events {
+    worker_connections  65536;
+}
+
+
+http {
+    include       /etc/angie/mime.types;
+    default_type  application/octet-stream;
+
+# Путь к базе стран GeoIP
+    geoip_country /usr/share/GeoIP/GeoIP.dat;
+
+    # Создаём переменную $allowed_country: 1 для RU, 0 для остальных
+    geo $allowed_country {
+        default 0;
+        $geoip_country_code RU 1;
+    }
+
+    log_format  main  '$remote_addr - $remote_user [$time_local] "$request" '
+                      '$status $body_bytes_sent "$http_referer" '
+                      '"$http_user_agent" "$http_x_forwarded_for"';
+
+    log_format extended '$remote_addr - $remote_user [$time_local] "$request" '
+                        '$status $body_bytes_sent "$http_referer" rt="$request_time" '
+                       '"$http_user_agent" "$http_x_forwarded_for" '
+                        'h="$host" sn="$server_name" ru="$request_uri" u="$uri" '
+                        'ucs="$upstream_cache_status" ua="$upstream_addr" us="$upstream_status" '
+                        'uct="$upstream_connect_time" urt="$upstream_response_time"';
+
+    # Новый формат лога security
+    log_format security '$remote_addr - $remote_user [$time_local] '
+                       '"$request" $status $body_bytes_sent '
+                       '"$http_referer" "$http_user_agent" '
+                       'rt=$request_time uct=$upstream_connect_time '
+                       'urt=$upstream_response_time '
+                       'cache=$upstream_cache_status '
+                       'limit_req_status=$limit_req_status '
+                       'limit_conn_status=$limit_conn_status';
+
+    access_log  /var/log/angie/access.log  main;
+
+    # Глобальные лимиты соединений
+    limit_conn_zone $binary_remote_addr zone=conn_limit_per_ip:10m;
+    limit_req_zone $binary_remote_addr zone=req_limit_per_ip:10m rate=30r/s;
+
+    # Зона для медленных соединений
+    limit_conn_zone $server_name zone=slow_conn:10m;
+
+    # Дополнительные зоны для rate limiting
+    limit_req_zone $binary_remote_addr zone=login_limit:10m rate=5r/m;
+    limit_req_zone $binary_remote_addr zone=api_limit:10m rate=10r/s;
+    limit_req_zone $binary_remote_addr zone=static_limit:10m rate=100r/s;
+ # Настройки кэширования
+    proxy_cache_path /var/cache/angie levels=1:2 keys_zone=proxy_cache:100m
+                     max_size=1g inactive=60m use_temp_path=off;
+
+    proxy_cache_path /var/cache/angie/static levels=1:2 keys_zone=static_cache:50m
+                     max_size=500m inactive=365d use_temp_path=off;
+
+    sendfile        on;
+    #tcp_nopush     on;
+
+    keepalive_timeout  65;
+
+    #gzip  on;
+
+    include /etc/angie/http.d/*.conf;
+}
+
+#stream {
+#    include /etc/angie/stream.d/*.conf;
+#}
+```
+
+</detail>
+
+Модифицируем location /wp-login.php и /wp-admin/ в вашем серверном блоке
+Добавим проверку переменной $allowed_country внутрь этих location. Если страна не Россия — сразу возвращаем 403, даже не доходя до прокси и базовой аутентификации.
+```
+# 9. ЗАЩИЩЕННЫЕ LOCATION
+
+# Защита входа в систему
+location = /wp-login.php {
+    # Проверка GeoIP: доступ только из России
+    if ($allowed_country != 1) {
+        return 403;
+    }
+
+    ....
+}
+
+# Админка:
+location ~ ^/wp-admin/ {
+    # Проверка GeoIP: доступ только из России
+    if ($allowed_country != 1) {
+        return 403;
+    }
+
+    ...
+}
+```
+
+Весь конфиг:
+<detail>
+
+```
+server {
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    http2 on;
+
+    server_name denis-otus.mtdlb.ru www.denis-otus.mtdlb.ru;
+
+    # 1. SSL НАСТРОЙКИ
+
+    # Пути к сертификатам
+    ssl_certificate /etc/letsencrypt/live/denis-otus.mtdlb.ru/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/denis-otus.mtdlb.ru/privkey.pem;
+
+    # Современные протоколы и шифры
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers 'ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256';
+    ssl_prefer_server_ciphers off;
+
+    # Оптимизация SSL сессий
+    ssl_session_timeout 1d;
+    ssl_session_cache shared:SSL:50m;
+    ssl_session_tickets off;
+
+    # DH параметры
+    ssl_dhparam /etc/ssl/certs/dhparam.pem;
+
+     # 2. БАЗОВЫЕ ЛИМИТЫ
+
+    # Ограничение размера запросов
+    client_max_body_size 10M;
+    client_body_buffer_size 128k;
+    client_header_buffer_size 1k;
+    large_client_header_buffers 4 8k;
+# 3. ЗАЩИТА ОТ МЕДЛЕННЫХ СОЕДИНЕНИЙ
+
+    # Ограничение времени чтения тела запроса
+    client_body_timeout 5s;  # Максимальное время для передачи тела запроса от клиента. Если клиент не успевает за 5 секунд - соединение разрывается.
+
+    # Ограничение времени чтения заголовков
+    client_header_timeout 5s;   # Максимальное время для получения заголовков от клиента. Защита от Slowloris-атак.
+
+    # Ограничение времени передачи ответа клиенту
+    send_timeout 5s; #  Максимальное время для отправки ответа клиенту. Если клиент не читает - соединение закрывается.
+
+    # Keepalive настройки для предотвращения удержания соединений
+    keepalive_timeout 15s; # Время удержания keepalive соединения. Короткий таймаут освобождает соединения быстрее.
+    keepalive_requests 100;  # Задает максимальное число запросов, которые можно сделать по одному keep-alive соединению. После того, как сделано максимальное число запросов, соединение закрывается. ((по умолчанию 1000)
+
+    # Максимальное количество соединений с одного IP
+    limit_conn conn_limit_per_ip 100; # Максимально 100 одновременных соединений с одного IP.
+
+    # Защита от Slowloris атак
+    limit_conn slow_conn 1000;  # Глобальное ограничение на медленные соединения.
+
+     # 4. RATE LIMITING
+
+    # Общий rate limiting
+    limit_req zone=req_limit_per_ip burst=50 nodelay;
+    limit_req_status 429;
+
+    # 5. SECURITY HEADERS
+
+    # HSTS - принудительное использование HTTPS
+    add_header Strict-Transport-Security "max-age=63072000; includeSubDomains; preload" always;
+
+    # Защита от MIME sniffing
+    add_header X-Content-Type-Options "nosniff" always;
+# Защита от clickjacking
+    add_header X-Frame-Options "SAMEORIGIN" always;
+
+    # XSS защита (устарело,для старых браузеров)
+    add_header X-XSS-Protection "1; mode=block" always;
+
+    # Referrer policy
+    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+
+    # Permissions policy
+    add_header Permissions-Policy "geolocation=(), microphone=(), camera=(), payment=()" always;
+
+    # CSP - политика безопасности контента
+    add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self';" always;
+
+    # 6. НАСТРОЙКИ КЭШИРОВАНИЯ
+
+    # Ключи кэширования
+    proxy_cache_key "$scheme$request_method$host$request_uri";
+    proxy_cache_valid 200 302 10m;
+    proxy_cache_valid 404 1m;
+
+    # Байпас кэша для определенных условий
+    proxy_cache_bypass $cookie_nocache $arg_nocache;
+    proxy_no_cache $cookie_nocache $arg_nocache;
+
+    # 7. ПРОКСИРОВАНИЕ
+
+    # Основной location
+    location / {
+        proxy_pass http://127.0.0.1:8080;
+
+        # Заголовки для правильной работы приложений
+proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Host $host;
+        proxy_set_header X-Forwarded-Port $server_port;
+
+        proxy_redirect http://127.0.0.1:8080/ https://$host/;
+        proxy_redirect http://$host/ https://$host/;
+
+        # Оптимизации
+        proxy_buffering on;
+        proxy_buffer_size 4k;
+        proxy_buffers 8 4k;
+        proxy_busy_buffers_size 8k;
+
+        # Таймауты
+        proxy_connect_timeout 5s;
+        proxy_send_timeout 10s;
+        proxy_read_timeout 10s;
+
+        # Включение кэширования
+#        proxy_cache proxy_cache;
+#        proxy_cache_lock on;
+#        proxy_cache_lock_timeout 5s;
+#        proxy_cache_use_stale error timeout updating http_500 http_502 http_503 http_504;
+
+        # Заголовки кэша
+#        add_header X-Cache-Status $upstream_cache_status;
+
+        # Rate limiting для динамического контента
+        limit_req zone=req_limit_per_ip burst=30 delay=20;
+    }
+# 8. СТАТИЧЕСКИЕ ФАЙЛЫ
+
+    location ~* \.(jpg|jpeg|png|gif|ico|css|js|svg|woff|woff2|ttf|eot|webp|avif)$ {
+        proxy_pass http://127.0.0.1:8080;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        # Агрессивное кэширование статики
+        expires 1y;
+        add_header Cache-Control "public, immutable";
+        add_header X-Content-Type-Options "nosniff";
+
+        # Кэширование на стороне Angie
+        proxy_cache static_cache;
+        proxy_cache_valid 200 302 365d;
+        proxy_cache_valid 404 1d;
+        proxy_cache_use_stale error timeout updating http_500 http_502 http_503 http_504;
+
+        # Разрешаем больше параллельных запросов к статике
+        limit_req zone=static_limit burst=200 nodelay;
+
+        # Более быстрые таймауты для статики
+        proxy_connect_timeout 3s;
+        proxy_read_timeout 5s;
+    }
+
+    # 9. ЗАЩИЩЕННЫЕ LOCATION
+
+    # Защита входа в систему
+    location = /wp-login.php {   # на нее перенаправляется админка со стороны wordpress
+        proxy_pass http://127.0.0.1:8080;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+      # Проверка GeoIP: доступ только из России
+        if ($allowed_country != 1) {
+        return 403;
+
+    # Строгий rate limiting для логина
+        limit_req zone=login_limit burst=3 nodelay;
+        limit_req_status 429;
+
+        # HTTP базовая авторизация
+        auth_basic "Restricted Area";
+        auth_basic_user_file /etc/angie/htpasswd;
+
+        # Ограничение по IP   # для тестов отключено,можно включать
+        #allow 127.0.0.1;
+        #allow 158.160.82.102; # Ваш IP
+        #deny all;
+
+        # Логирование попыток доступа
+        access_log /var/log/angie/auth.log;
+
+        # Отключаем кэш для защищенных зон
+        proxy_no_cache 1;
+        proxy_cache_bypass 1;
+    }
+
+    #Админка:
+    location ~ ^/wp-admin/ {
+    proxy_pass http://127.0.0.1:8080;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-Proto $scheme;
+
+    # Проверка GeoIP: доступ только из России
+    if ($allowed_country != 1) {
+    return 403;
+   
+    # Снижаем ограничения для админки
+    limit_req zone=req_limit_per_ip burst=50 nodelay;
+
+    # Отключаем кэширование
+    proxy_no_cache 1;
+    proxy_cache_bypass 1;
+# Увеличиваем таймауты
+    proxy_connect_timeout 30s;
+    proxy_read_timeout 60s;
+}
+
+    # API endpoint protection
+    location ~ ^/api/ {
+        proxy_pass http://127.0.0.1:8080;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        # Rate limiting для API
+        limit_req zone=api_limit burst=20 nodelay;
+
+        # Заголовки для API
+        add_header X-API-Version "1.0" always;
+        add_header X-RateLimit-Limit "10" always;
+        add_header X-RateLimit-Remaining "9" always;
+
+        # Кэширование API ответов
+        proxy_cache proxy_cache;
+        proxy_cache_valid 200 10s;
+        proxy_cache_methods GET HEAD;
+        proxy_cache_key "$scheme$request_method$host$request_uri$is_args$args";
+    }
+
+    # 10. ЗАЩИТА ОТ БОТОВ И СКАНЕРОВ
+
+    # Блокировка известных сканеров
+    if ($http_user_agent ~* (nmap|nikto|sqlmap|w3af|acunetix|openvas|nessus|metasploit|dirbuster|wapiti|burpsuite|hydra)) {
+        return 444;
+    }
+# Блокировка ботов
+    if ($http_user_agent ~* (bot|crawl|spider|scraper|python|java|wget|libwww)) {
+        return 444;
+    }
+
+    # Блокировка пустых User-Agent
+    if ($http_user_agent = "") {
+        return 444;
+    }
+
+    # Блокировка нестандартных методов
+    if ($request_method !~ ^(GET|HEAD|POST|PUT|DELETE|PATCH|OPTIONS)$) {
+        return 444;
+    }
+
+    # Блокировка чувствительных файлов
+    location ~* \.(log|sql|conf|config|yml|yaml|env|ini|bak|backup|tar|gz|zip|swp)$ {
+        deny all;
+        return 404;
+    }
+
+    # Блокировка скрытых файлов
+    location ~ /\. {
+        deny all;
+        return 404;
+    }
+
+    # 11. LET'S ENCRYPT
+
+    location ^~ /.well-known/acme-challenge/ {
+        root /var/www/denis-otus.mtdlb.ru/html;
+        allow all;
+        try_files $uri =404;
+        access_log off;
+}
+
+    # 12. КАСТОМНЫЕ ОШИБКИ
+
+    error_page 429 =429 /429.html;
+    error_page 444 =444 /444.html;
+    error_page 403 =403 /403.html;
+    error_page 404 =404 /404.html;
+
+    location = /429.html {
+        internal;
+        return 429 '{"error": "Too Many Requests", "message": "Rate limit exceeded. Please try again later."}';
+    }
+
+    location = /444.html {
+        internal;
+        return 444;
+    }
+
+    location = /403.html {
+        return 403 '{"error": "Forbidden", "message": "Access denied"}';
+    }
+
+    # 13. ЛОГИРОВАНИЕ
+
+    # Основной лог (использует формат security из основного конфига)
+    access_log /var/log/angie/access.log security;
+    error_log /var/log/angie/error.log warn;
+
+    # Отдельные логи для мониторинга
+    access_log /var/log/angie/security.log security if=$limit_req_status;
+    access_log /var/log/angie/slow.log security if=$request_time>5;
+}
+14. HTTP REDIRECT
+
+server {
+    listen 80;
+    listen [::]:80;
+    server_name denis-otus.mtdlb.ru www.denis-otus.mtdlb.ru;
+
+    # Let's Encrypt
+    location ^~ /.well-known/acme-challenge/ {
+        root /var/www/denis-otus.mtdlb.ru/html;
+        allow all;
+        try_files $uri =404;
+        access_log off;
+    }
+
+    # Редирект на HTTPS
+    location / {
+        return 301 https://$server_name$request_uri;
+    }
+}
+
+   
+```
+
+</detail>
+
+Проверяем синтаксис
+```
+sudo angie -t
+```
+Если всё хорошо — перезагружаем конфигурацию
+```
+sudo systemctl reload angie
+```
