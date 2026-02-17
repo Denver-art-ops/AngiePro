@@ -1246,7 +1246,37 @@ zubahin@compute-vm-3:/etc/angie$ sudo angie -t
 angie: [emerg] MMDB_open("/var/lib/GeoIP/GeoLite2-Country.mmdb") failed - Error opening the specified MaxMind DB file in /etc/angie/angie.conf:23
 angie: configuration file /etc/angie/angie.conf test failed
 
-### Нужно зарегистрироваться и установить БД  GeoLite2 (Пока не выполнено)
+### Ставим базу с зеркала на GitHUB из-за ограничений MaxMind в отношении России:
+Ручная загрузка (быстро, без регистрации)
+можно воспользоваться зеркалами, которые распространяют базы на основе открытых данных. Одно из таких зеркал — репозиторий P3TERX/GeoLite.mmdb на GitHub .
+Создаем директорию, если её нет
+```
+sudo mkdir -p /var/lib/GeoIP
+```
+Скачиваем свежую базу данных стран с зеркала
+```
+sudo wget -O /var/lib/GeoIP/GeoLite2-Country.mmdb https://github.com/P3TERX/GeoLite.mmdb/raw/download/GeoLite2-Country.mmdb
+```
+
+Устанавливаем правильные права доступа
+```
+sudo chmod 644 /var/lib/GeoIP/GeoLite2-Country.mmdb
+```
+
+И вуаля!  все работает:
+
+```
+zubahin@compute-vm-3:/etc/angie$ sudo angie -t
+angie: the configuration file /etc/angie/angie.conf syntax is ok
+angie: configuration file /etc/angie/angie.conf test is successful
+zubahin@compute-vm-3:/etc/angie$ sudo systemctl restart angie.service
+```
+
+### Теперь подключения из-за границы России не работает, что можно проверить через внешний VPN.
+
+
+
+### Вариант 2 (верный) Нужно зарегистрироваться и установить БД  GeoLite2 (Пока не выполнено - maxmind не дает зарегистрироваться!)
 
 Шаг 1. Зарегистрируйтесь и получите лицензионный ключ
 Переходим на сайт MaxMind и регистрируемся (бесплатно) .
