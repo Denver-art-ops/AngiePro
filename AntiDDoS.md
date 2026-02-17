@@ -709,7 +709,8 @@ http {
     default_type  application/octet-stream;
 
 # Путь к базе стран GeoIP
-    geoip_country /usr/share/GeoIP/GeoIP.dat;
+  load_module modules/angie-module-geoip2;  -неверная запись хотя у angie так пакет и называется
+  load_module modules/ngx_http_geoip2_module.so;
 
     # Создаём переменную $allowed_country: 1 для RU, 0 для остальных
     geo $allowed_country {
