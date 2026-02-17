@@ -650,11 +650,21 @@ sudo chown -R angie:angie /var/www/denis-otus.mtdlb.ru/html
 sudo apt install geoip-database
 ```
 
+Стави внешний пакет с GeoIP для Angie:
+```
+sudo apt-get install -y angie-module-geoip2
+```
+
+
 Активируем модуль GeoIP в основном конфиге Angie:
 
 ```
 # Загружаем модуль GeoIP
-load_module modules/ngx_http_geoip_module.so;
+load_module modules/angie-module-geoip2;
+
+apt search angie-module
+
+apt search angie-module
 ...
 
 http {
@@ -683,7 +693,7 @@ worker_processes  auto;
 worker_rlimit_nofile 65536;
 
 # Загружаем модуль GeoIP
-load_module modules/ngx_http_geoip_module.so;
+load_module modules/angie-module-geoip2;
 
 
 error_log  /var/log/angie/error.log notice;
