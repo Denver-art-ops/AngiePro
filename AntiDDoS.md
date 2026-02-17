@@ -783,8 +783,8 @@ http {
 
 # Защита входа в систему
 location = /wp-login.php {
-    # Проверка GeoIP: доступ только из России
-    if ($allowed_country != 1) {
+    # Проверка GeoIP2: доступ только из России
+    if ($geoip2_country_code != "RU") {
         return 403;
     }
 
@@ -793,8 +793,8 @@ location = /wp-login.php {
 
 # Админка:
 location ~ ^/wp-admin/ {
-    # Проверка GeoIP: доступ только из России
-    if ($allowed_country != 1) {
+    # Проверка GeoIP2: доступ только из России
+    if ($geoip2_country_code != "RU") {
         return 403;
     }
 
@@ -975,9 +975,10 @@ proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-Proto $scheme;
 
-      # Проверка GeoIP: доступ только из России
-        if ($allowed_country != 1) {
+     # Проверка GeoIP2: доступ только из России
+     if ($geoip2_country_code != "RU") {
         return 403;
+    }
 
     # Строгий rate limiting для логина
         limit_req zone=login_limit burst=3 nodelay;
@@ -991,7 +992,7 @@ proxy_set_header Host $host;
         #allow 127.0.0.1;
         #allow 158.160.82.102; # Ваш IP
         #deny all;
-
+   
         # Логирование попыток доступа
         access_log /var/log/angie/auth.log;
 
@@ -1007,9 +1008,10 @@ proxy_set_header Host $host;
     proxy_set_header X-Real-IP $remote_addr;
     proxy_set_header X-Forwarded-Proto $scheme;
 
-    # Проверка GeoIP: доступ только из России
-    if ($allowed_country != 1) {
-    return 403;
+    # Проверка GeoIP2: доступ только из России
+    if ($geoip2_country_code != "RU") {
+        return 403;
+    }
    
     # Снижаем ограничения для админки
     limit_req zone=req_limit_per_ip burst=50 nodelay;
