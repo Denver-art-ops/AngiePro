@@ -1239,3 +1239,53 @@ Status for the jail: wordpress-angie
    |- Total banned:     0
    `- Banned IP list:
 ```
+
+###  Видим ошибку при проверке:
+
+zubahin@compute-vm-3:/etc/angie$ sudo angie -t
+angie: [emerg] MMDB_open("/var/lib/GeoIP/GeoLite2-Country.mmdb") failed - Error opening the specified MaxMind DB file in /etc/angie/angie.conf:23
+angie: configuration file /etc/angie/angie.conf test failed
+
+### Нужно зарегистрироваться и установить БД  GeoLite2 (Пока не выполнено)
+
+Шаг 1. Зарегистрируйтесь и получите лицензионный ключ
+Переходим на сайт MaxMind и регистрируемся (бесплатно) .
+После входа в аккаунт переходим в раздел "My License Key" и создаем новый лицензионный ключ.
+
+Шаг 2. Установите geoipupdate
+```
+sudo apt update
+sudo apt install geoipupdate -y
+```
+Это установит программу для загрузки баз и создаст файл конфигурации /etc/GeoIP.conf .
+
+Шаг 3. Настройте geoipupdate
+Отредактируйте файл конфигурации:
+```
+sudo nano /etc/GeoIP.conf
+```
+Приведите его к следующему виду, подставив свои AccountID (ваш ID из личного кабинета) и LicenseKey :
+
+```
+# /etc/GeoIP.conf
+AccountID YOUR_ACCOUNT_ID_HERE
+LicenseKey YOUR_LICENSE_KEY_HERE
+EditionIDs GeoLite2-Country
+```
+AccountID и LicenseKey вы получили на сайте MaxMind.
+EditionIDs указывает, какую базу скачивать. Для наших целей нужна GeoLite2-Country .
+
+Шаг 4. Запустите загрузку базы
+```
+sudo geoipupdate
+```
+Эта команда скачает базу данных и поместит её в /var/lib/GeoIP/GeoLite2-Country.mmdb .
+
+Шаг 5. Проверьте права доступа
+Убедитесь, что у пользователя angie (от которого работает веб-сервер) есть доступ к файлу:
+```
+sudo ls -la /var/lib/GeoIP/GeoLite2-Country.mmdb
+
+# Если файл принадлежит root:root и имеет права 644, это нормально.
+# Angie сможет его прочитать.
+```
