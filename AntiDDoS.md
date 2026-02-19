@@ -369,7 +369,7 @@ server {
         proxy_pass http://127.0.0.1:8080;
 
         # Заголовки для правильной работы приложений
-proxy_set_header Host $host;
+        proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
@@ -776,7 +776,7 @@ http {
 
 </detail>
 
-Модифицируем location /wp-login.php и /wp-admin/ в вашем серверном блоке
+Модифицируем location /wp-login.php и /wp-admin/  серверном блоке
 Добавим проверку переменной $allowed_country внутрь этих location. Если страна не Россия — сразу возвращаем 403, даже не доходя до прокси и базовой аутентификации.
 ```
 # 9. ЗАЩИЩЕННЫЕ LOCATION
