@@ -174,73 +174,346 @@ post_max_size = 64M
 max_execution_time = 300
 ```
 
-### Шаг 2.  Меняем конфигурацию Angie
+###  Шаг 2 Настройка для работы wordpress с несколькими репликами
 
-Меняем содержимое конфигурации в /etc/angie/http.d/wordpress.conf
+Сделаем скрипт:
+```
+sudo vim init-wordpress.sh
+```
+
 
 ```
+#!/bin/bash
+
+# Ожидаем запуск всех контейнеров
+sleep 10
+
+# Для каждой реплики WordPress
+for i in 1 2 3; do
+  echo "Configuring WordPress replica $i..."
+  
+  # Настраиваем WordPress для работы с несколькими серверами
+  docker exec wordpress-app-$i wp config set WP_CACHE true --type=constant --allow-root
+  docker exec wordpress-app-$i wp config set WP_REDIS_HOST redis --type=constant --allow-root
+  docker exec wordpress-app-$i wp config set WP_REDIS_PORT 6379 --type=constant --allow-root
+  docker exec wordpress-app-$i wp config set WP_REDIS_DATABASE 0 --type=constant --allow-root
+  
+  # Настраиваем URL сайта (должен быть одинаковым для всех реплик)
+  docker exec wordpress-app-$i wp option update siteurl "https://denis-otus.mtdlb.ru" --allow-root
+  docker exec wordpress-app-$i wp option update home "https://denis-otus.mtdlb.ru" --allow-root
+  
+  echo "WordPress replica $i configured."
+done
+
+echo "All WordPress replicas are ready!"
+
+```
+
+###  Шаг 3.  Базовую конфигурацию Angie оставляем без изменений:
+
+```
+user  angie;
+worker_processes  auto;
+worker_rlimit_nofile 65536;
+
+# Загружаем модуль GeoIP
+load_module modules/angie-module-geoip2;
+
+
+error_log  /var/log/angie/error.log notice;
+pid        /run/angie.pid;
+
+events {
+    worker_connections  65536;
+}
+
+
+http {
+    include       /etc/angie/mime.types;
+    default_type  application/octet-stream;
+
+# Путь к базе стран GeoIP
+  load_module modules/angie-module-geoip2;  -неверная запись хотя у angie так пакет и называется
+  load_module modules/ngx_http_geoip2_module.so;
+
+    # Создаём переменную $allowed_country: 1 для RU, 0 для остальных
+    geo $allowed_country {
+        default 0;
+        $geoip_country_code RU 1;
+    }
+
+    log_format  main  '$remote_addr - $remote_user [$time_local] "$request" '
+                      '$status $body_bytes_sent "$http_referer" '
+                      '"$http_user_agent" "$http_x_forwarded_for"';
+
+    log_format extended '$remote_addr - $remote_user [$time_local] "$request" '
+                        '$status $body_bytes_sent "$http_referer" rt="$request_time" '
+                       '"$http_user_agent" "$http_x_forwarded_for" '
+                        'h="$host" sn="$server_name" ru="$request_uri" u="$uri" '
+                        'ucs="$upstream_cache_status" ua="$upstream_addr" us="$upstream_status" '
+                        'uct="$upstream_connect_time" urt="$upstream_response_time"';
+
+    # Новый формат лога security
+    log_format security '$remote_addr - $remote_user [$time_local] '
+                       '"$request" $status $body_bytes_sent '
+                       '"$http_referer" "$http_user_agent" '
+                       'rt=$request_time uct=$upstream_connect_time '
+                       'urt=$upstream_response_time '
+                       'cache=$upstream_cache_status '
+                       'limit_req_status=$limit_req_status '
+                       'limit_conn_status=$limit_conn_status';
+
+    access_log  /var/log/angie/access.log  main;
+
+    # Глобальные лимиты соединений
+    limit_conn_zone $binary_remote_addr zone=conn_limit_per_ip:10m;
+    limit_req_zone $binary_remote_addr zone=req_limit_per_ip:10m rate=30r/s;
+
+    # Зона для медленных соединений
+    limit_conn_zone $server_name zone=slow_conn:10m;
+
+    # Дополнительные зоны для rate limiting
+    limit_req_zone $binary_remote_addr zone=login_limit:10m rate=5r/m;
+    limit_req_zone $binary_remote_addr zone=api_limit:10m rate=10r/s;
+    limit_req_zone $binary_remote_addr zone=static_limit:10m rate=100r/s;
+    # Настройки кэширования
+    proxy_cache_path /var/cache/angie levels=1:2 keys_zone=proxy_cache:100m
+                     max_size=1g inactive=60m use_temp_path=off;
+
+    proxy_cache_path /var/cache/angie/static levels=1:2 keys_zone=static_cache:50m
+                     max_size=500m inactive=365d use_temp_path=off;
+
+    sendfile        on;
+    #tcp_nopush     on;
+
+    keepalive_timeout  65;
+
+    #gzip  on;
+
+    include /etc/angie/http.d/*.conf;
+}
+
+#stream {
+#    include /etc/angie/stream.d/*.conf;
+#} 
+```
+
+
+
+### Шаг 4.  Меняем конфигурацию Angie
+
+Меняем содержимое конфигурации в /etc/angie/http.d/wordpress3.conf
+
+```
+    # Определение upstream для балансировки WordPress реплик
+    upstream wordpress_backend {
+    # Балансировка по наименьшему количеству соединений
+    least_conn;
+    
+    # Сервера WordPress реплик
+    server wordpress-app-1:80 max_fails=3 fail_timeout=30s;
+    server wordpress-app-2:80 max_fails=3 fail_timeout=30s;
+    server wordpress-app-3:80 max_fails=3 fail_timeout=30s;
+    
+    # Keepalive соединения для производительности
+    keepalive 32;
+    keepalive_requests 100;
+    keepalive_timeout 60s;
+}
+
 server {
     listen 443 ssl;
     listen [::]:443 ssl;
     http2 on;
-    
+
     server_name denis-otus.mtdlb.ru www.denis-otus.mtdlb.ru;
-    
-    # SSL конфигурация
+
+    # SSL настройки (оставляем без изменений)
     ssl_certificate /etc/letsencrypt/live/denis-otus.mtdlb.ru/fullchain.pem;
     ssl_certificate_key /etc/letsencrypt/live/denis-otus.mtdlb.ru/privkey.pem;
     ssl_protocols TLSv1.2 TLSv1.3;
     ssl_ciphers 'ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256';
+    ssl_prefer_server_ciphers off;
     ssl_session_timeout 1d;
     ssl_session_cache shared:SSL:50m;
     ssl_session_tickets off;
     ssl_dhparam /etc/ssl/certs/dhparam.pem;
-    
-    # Security headers
-    add_header Strict-Transport-Security "max-age=63072000" always;
+
+    # Базовые лимиты (оставляем без изменений)
+    client_max_body_size 10M;
+    client_body_buffer_size 128k;
+    client_header_buffer_size 1k;
+    large_client_header_buffers 4 8k;
+
+    # Таймауты защиты
+    client_body_timeout 5s;
+    client_header_timeout 5s;
+    send_timeout 5s;
+    keepalive_timeout 15s;
+    keepalive_requests 100;
+
+    # Лимиты соединений
+    limit_conn conn_limit_per_ip 100;
+    limit_conn slow_conn 1000;
+
+    # Rate limiting
+    limit_req zone=req_limit_per_ip burst=50 nodelay;
+    limit_req_status 429;
+
+    # Security headers (оставляем без изменений)
+    add_header Strict-Transport-Security "max-age=63072000; includeSubDomains; preload" always;
     add_header X-Content-Type-Options "nosniff" always;
     add_header X-Frame-Options "SAMEORIGIN" always;
+    add_header X-XSS-Protection "1; mode=block" always;
     add_header Referrer-Policy "strict-origin-when-cross-origin" always;
     add_header Permissions-Policy "geolocation=(), microphone=(), camera=(), payment=()" always;
-    
-    # Проксирование на WordPress
+    add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self';" always;
+
+    # Настройки кэширования (оставляем без изменений)
+    proxy_cache_key "$scheme$request_method$host$request_uri";
+    proxy_cache_valid 200 302 10m;
+    proxy_cache_valid 404 1m;
+    proxy_cache_bypass $cookie_nocache $arg_nocache;
+    proxy_no_cache $cookie_nocache $arg_nocache;
+
+    # Основной location с балансировкой
     location / {
-        proxy_pass http://127.0.0.1:8080;
+        proxy_pass http://wordpress_backend;
+        
+        # Важные заголовки для WordPress
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
         proxy_set_header X-Forwarded-Host $host;
+        proxy_set_header X-Forwarded-Port $server_port;
         
-        # Критически важные настройки для WordPress
-        proxy_redirect http://127.0.0.1:8080/ https://$host/;
-        proxy_redirect http://$host:8080/ https://$host/;
+        # Заголовки для корректной работы сессий
+        proxy_set_header X-Forwarded-Server $host;
+        proxy_set_header X-Original-URI $request_uri;
+        
+        # Перенаправления
+        proxy_redirect http://wordpress_backend/ https://$host/;
         proxy_redirect http://$host/ https://$host/;
         
-        # Оптимизации
+        # Оптимизация прокси
         proxy_buffering on;
-        proxy_buffer_size 128k;
-        proxy_buffers 256 16k;
-        proxy_busy_buffers_size 256k;
-        proxy_temp_file_write_size 256k;
-        proxy_connect_timeout 90;
-        proxy_send_timeout 90;
-        proxy_read_timeout 90;
+        proxy_buffer_size 4k;
+        proxy_buffers 8 4k;
+        proxy_busy_buffers_size 8k;
+        
+        # Таймауты (адаптированы для балансировки)
+        proxy_connect_timeout 5s;
+        proxy_send_timeout 10s;
+        proxy_read_timeout 10s;
+        
+        # Для sticky sessions (если потребуется привязка к серверу в будущем)
+        proxy_cookie_path ~*^/ /;
+        
+        # Заголовки для отладки балансировки
+        add_header X-Upstream $upstream_addr always;
+        add_header X-Upstream-Status $upstream_status always;
+        
+        # Rate limiting
+        limit_req zone=req_limit_per_ip burst=30 delay=20;
     }
-    
-    # Кэширование статических файлов
-    location ~* \.(jpg|jpeg|png|gif|ico|css|js|svg|woff|woff2|ttf|eot|webp)$ {
-        proxy_pass http://127.0.0.1:8080;
+
+    # Статические файлы (оптимизировано для нескольких бэкендов)
+    location ~* \.(jpg|jpeg|png|gif|ico|css|js|svg|woff|woff2|ttf|eot|webp|avif)$ {
+        proxy_pass http://wordpress_backend;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
         
+        # Кэширование статики
         expires 1y;
         add_header Cache-Control "public, immutable";
         add_header X-Content-Type-Options "nosniff";
+        
+        # Кэширование на стороне Angie
+        proxy_cache static_cache;
+        proxy_cache_valid 200 302 365d;
+        proxy_cache_valid 404 1d;
+        proxy_cache_use_stale error timeout updating http_500 http_502 http_503 http_504;
+        
+        # Rate limiting для статики
+        limit_req zone=static_limit burst=200 nodelay;
+        
+        # Быстрые таймауты
+        proxy_connect_timeout 3s;
+        proxy_read_timeout 5s;
     }
-    
+
+    # Защита wp-login.php
+    location = /wp-login.php {
+        proxy_pass http://wordpress_backend;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        
+        # GeoIP проверка
+        if ($geoip2_country_code != "RU") {
+            return 403;
+        }
+        
+        # Строгий rate limiting для логина
+        limit_req zone=login_limit burst=3 nodelay;
+        limit_req_status 429;
+        
+        # Базовая авторизация
+        auth_basic "Restricted Area";
+        auth_basic_user_file /etc/angie/htpasswd;
+        
+        access_log /var/log/angie/auth.log;
+        proxy_no_cache 1;
+        proxy_cache_bypass 1;
+    }
+
+    # Админка WordPress
+    location ~ ^/wp-admin/ {
+        proxy_pass http://wordpress_backend;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        
+        # GeoIP проверка
+        if ($geoip2_country_code != "RU") {
+            return 403;
+        }
+        
+        # Сниженные ограничения для админки
+        limit_req zone=req_limit_per_ip burst=50 nodelay;
+        
+        # Отключаем кэш
+        proxy_no_cache 1;
+        proxy_cache_bypass 1;
+        
+        # Увеличенные таймауты для админки
+        proxy_connect_timeout 30s;
+        proxy_read_timeout 60s;
+    }
+
+    # API endpoint
+    location ~ ^/api/ {
+        proxy_pass http://wordpress_backend;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        
+        # Rate limiting для API
+        limit_req zone=api_limit burst=20 nodelay;
+        
+        # API заголовки
+        add_header X-API-Version "1.0" always;
+        add_header X-RateLimit-Limit "10" always;
+        
+        # Кэширование API
+        proxy_cache proxy_cache;
+        proxy_cache_valid 200 10s;
+        proxy_cache_methods GET HEAD;
+        proxy_cache_key "$scheme$request_method$host$request_uri$is_args$args";
+    }
+
     # Let's Encrypt
     location ^~ /.well-known/acme-challenge/ {
         root /var/www/denis-otus.mtdlb.ru/html;
@@ -248,30 +521,48 @@ server {
         try_files $uri =404;
         access_log off;
     }
-    
-    # Блокировка нежелательных запросов
-    location ~* /(wp-config\.php|xmlrpc\.php|readme\.html|license\.txt) {
-        deny all;
-        return 404;
+
+    # Кастомные ошибки
+    error_page 429 =429 /429.html;
+    error_page 444 =444 /444.html;
+    error_page 403 =403 /403.html;
+    error_page 404 =404 /404.html;
+    error_page 502 503 504 /50x.html;
+
+    location = /429.html {
+        internal;
+        return 429 '{"error": "Too Many Requests", "message": "Rate limit exceeded. Please try again later."}';
     }
-    
+
+    location = /444.html {
+        internal;
+        return 444;
+    }
+
+    location = /403.html {
+        return 403 '{"error": "Forbidden", "message": "Access denied"}';
+    }
+
     # Логирование
-    access_log /var/log/angie/wordpress.access.log;
-    error_log /var/log/angie/wordpress.error.log warn;
+    access_log /var/log/angie/access.log security;
+    error_log /var/log/angie/error.log warn;
+    access_log /var/log/angie/security.log security if=$limit_req_status;
+    access_log /var/log/angie/slow.log security if=$request_time>5;
 }
 
-# Перенаправление HTTP -> HTTPS
+# HTTP редирект (оставляем ваш)
 server {
     listen 80;
     listen [::]:80;
     server_name denis-otus.mtdlb.ru www.denis-otus.mtdlb.ru;
-    
+
     location ^~ /.well-known/acme-challenge/ {
         root /var/www/denis-otus.mtdlb.ru/html;
         allow all;
         try_files $uri =404;
+        access_log off;
     }
-    
+
     location / {
         return 301 https://$server_name$request_uri;
     }
@@ -285,16 +576,16 @@ total 32
 drwxr-xr-x 4 root root 4096 Feb  5 12:05 .
 drwxr-xr-x 4 root root 4096 Jan 28 11:17 ..
 drwxr-xr-x 2 root root 4096 Jan 28 11:30 arc
--rw-r--r-- 1 root root 5023 Jan 29 13:11 denis-otus.mtdlb.ru-ssl2.conf
+-rw-r--r-- 1 root root 5023 Jan 29 13:11 wordpress3.conf
 drwxr-xr-x 2 root root 4096 Jan 27 19:21 sites-enabled
 -rw-r--r-- 1 root root 5093 Feb  5 12:05 wordpress.conf
 ```
 Старую конфигурацию переносим в архив (arc):
 ```
-sudo mv /etc/angie/http.d/denis-otus.mtdlb.ru-ssl2.conf /etc/angie/http.d/arc
+sudo mv /etc/angie/http.d/wordpress.conf /etc/angie/http.d/arc
 ```
 
-### Шаг 3.  Создаем .env файл в папке проекта, устанавливаем docker-compose  и запускаем docker-compose:
+### Шаг 5.  Создаем .env файл в папке проекта, устанавливаем docker-compose  и запускаем docker-compose:
 
 ```
 zubahin@compute-vm-3:~/project$ sudo vim .env
@@ -316,21 +607,79 @@ sudo apt install docker-compose
 
 ```
 
-Запускаем docker-compose:
+Останавливаем все контейнеры (если уже был установлен):
+
+```
+docker-compose down
+```
+
+Запускаем docker-compose (после обновления YAML файла (см. выше) ):
 
 ```
 sudo docker-compose up -d
 ```
 
-### Шаг 4.  Проверяем результаты:
+Убедимся что все контейнеры работают
+```
+docker-compose ps
+```
+Проверим, что все реплики WordPress подключены к БД
+```
+docker-compose logs wordpress-app-1 | tail
+docker-compose logs wordpress-app-2 | tail
+docker-compose logs wordpress-app-3 | tail
+```
+Выполним инициализацию WordPress
+```
+chmod +x init-wordpress.sh
+./init-wordpress.sh
+```
+Перезапустим Angie (после обновления конфигурации серверного блока (см. выше) )
+```
+sudo systemctl restart angie
+```
 
+Проверяем балансировку
 ```
-zubahin@compute-vm-3:~/project$ sudo docker ps -a
-CONTAINER ID   IMAGE              COMMAND                  CREATED          STATUS          PORTS                    NAMES
-238a66cc4c55   wordpress:latest   "docker-entrypoint.s…"   13 minutes ago   Up 13 minutes   127.0.0.1:8080->80/tcp   wordpress-app
-5f462c30f52a   mysql:8.0          "docker-entrypoint.s…"   13 minutes ago   Up 13 minutes   3306/tcp, 33060/tcp      wordpress-db
+curl -I https://denis-otus.mtdlb.ru
 ```
-И идем донастраивать Wordpress:
+
+
+### Шаг 6.  Проверяем результаты:
+
+#### Проверка распределения запросов (должны видеть разные upstream адреса)
+```
+for i in {1..10}; do
+  curl -sI https://denis-otus.mtdlb.ru | grep X-Upstream
+done
+```
+#### Мониторинг статуса контейнеров
+```
+watch -n 1 'docker-compose ps'
+```
+
+#### Проверка логов Angie
+```
+sudo tail -f /var/log/angie/access.log | grep X-Upstream
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
