@@ -1,5 +1,6 @@
-### В качестве основы возьмем конфигурацию Angie из задания с TLS где уже настроен HTTPS на тестовую страницу, но добавим в дополнение к Angie развернутому на хосте
-### контейнеры с wordpress и базой данных mysql с помощью docker-compose
+# Настраиваем систему, где балансировщик будет выступать в качестве обратного HTTPS прокси, терминируя на себе TLS и пробрасывая HTTP в сторону одного из трех бэкендов на базе CMS  Wordpress, работающих с единой базой данных.
+
+#### В качестве основы возьмем конфигурацию Angie из задания с TLS где уже настроен HTTPS на тестовую страницу, но добавим в дополнение к Angie развернутому на хосте контейнеры с wordpress и базой данных mysql с помощью docker-compose, а также настроим балансировку между ними.
 
 #### Создаем необходимые для docker-compose файлы в директории проекта:
 
@@ -23,7 +24,7 @@ zubahin@compute-vm-3:~$ cd project/
 zubahin@compute-vm-3:~/project$ 
 ```
 
-В папке проекта создаем YAML -файл docker-compose.yml
+### Шаг 1: В папке проекта создаем YAML -файл docker-compose.yml c тремя репликами wordpress и единой БД
 ```
 sudo vim docker-compose.yml
 ```
@@ -32,6 +33,7 @@ sudo vim docker-compose.yml
 version: '3.8'
 
 services:
+  # Единая база данных для всех WordPress
   wordpress-db:
     image: mysql:8.0
     container_name: wordpress-db
@@ -49,37 +51,115 @@ services:
       - --default-authentication-plugin=mysql_native_password
       - --character-set-server=utf8mb4
       - --collation-server=utf8mb4_unicode_ci
+      - --max_connections=500  # Увеличиваем для трех приложений
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      timeout: 10s
+      retries: 5
 
-  wordpress-app:
+  # Первая реплика WordPress
+  wordpress-app-1:
     image: wordpress:latest
-    container_name: wordpress-app
+    container_name: wordpress-app-1
     restart: unless-stopped
-    ports:
-      - "127.0.0.1:8080:80"
+    expose:
+      - "80"  # Убираем ports, оставляем expose для внутренней сети
     environment:
       WORDPRESS_DB_HOST: wordpress-db:3306
       WORDPRESS_DB_USER: wordpress
       WORDPRESS_DB_PASSWORD: ${DB_PASSWORD:-Gh56Tyfg091df}
       WORDPRESS_DB_NAME: wordpress
-      # УДАЛИТЕ WORDPRESS_CONFIG_EXTRA отсюда
+      WORDPRESS_CONFIG_EXTRA: |
+        define('WP_CACHE', true);
+        define('WP_MEMORY_LIMIT', '256M');
+        define('WP_MAX_MEMORY_LIMIT', '512M');
+        define('DISABLE_WP_CRON', true);  # Отключаем встроенный cron
+    volumes:
+      - wordpress_data:/var/www/html  # Общий volume для всех реплик
+      - ./uploads.ini:/usr/local/etc/php/conf.d/uploads.ini
+    networks:
+      - wordpress_network
+    depends_on:
+      wordpress-db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/wp-admin/install.php"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Вторая реплика WordPress
+  wordpress-app-2:
+    image: wordpress:latest
+    container_name: wordpress-app-2
+    restart: unless-stopped
+    expose:
+      - "80"
+    environment:
+      WORDPRESS_DB_HOST: wordpress-db:3306
+      WORDPRESS_DB_USER: wordpress
+      WORDPRESS_DB_PASSWORD: ${DB_PASSWORD:-Gh56Tyfg091df}
+      WORDPRESS_DB_NAME: wordpress
+      WORDPRESS_CONFIG_EXTRA: |
+        define('WP_CACHE', true);
+        define('WP_MEMORY_LIMIT', '256M');
+        define('WP_MAX_MEMORY_LIMIT', '512M');
+        define('DISABLE_WP_CRON', true);
+    volumes:
+      - wordpress_data:/var/www/html  # Тот же общий volume
+      - ./uploads.ini:/usr/local/etc/php/conf.d/uploads.ini
+    networks:
+      - wordpress_network
+    depends_on:
+      wordpress-db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/wp-admin/install.php"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Третья реплика WordPress
+  wordpress-app-3:
+    image: wordpress:latest
+    container_name: wordpress-app-3
+    restart: unless-stopped
+    expose:
+      - "80"
+    environment:
+      WORDPRESS_DB_HOST: wordpress-db:3306
+      WORDPRESS_DB_USER: wordpress
+      WORDPRESS_DB_PASSWORD: ${DB_PASSWORD:-Gh56Tyfg091df}
+      WORDPRESS_DB_NAME: wordpress
+      WORDPRESS_CONFIG_EXTRA: |
+        define('WP_CACHE', true);
+        define('WP_MEMORY_LIMIT', '256M');
+        define('WP_MAX_MEMORY_LIMIT', '512M');
+        define('DISABLE_WP_CRON', true);
     volumes:
       - wordpress_data:/var/www/html
       - ./uploads.ini:/usr/local/etc/php/conf.d/uploads.ini
     networks:
       - wordpress_network
     depends_on:
-      - wordpress-db
+      wordpress-db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/wp-admin/install.php"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
 networks:
   wordpress_network:
     driver: bridge
+    name: wordpress_network
 
 volumes:
   wordpress_db_data:
     name: wordpress_db_data
   wordpress_data:
-    name: wordpress_data
-
+    name: wordpress_data  # Общий volume для всех WordPress
 ```
 
 Создаем файл uploads.ini для увеличения лимитов загрузки файлов:
