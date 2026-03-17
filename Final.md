@@ -47,11 +47,11 @@ services:
       - wordpress_db_data:/var/lib/mysql
     networks:
       - wordpress_network
-    command: 
+    command:
       - --default-authentication-plugin=mysql_native_password
       - --character-set-server=utf8mb4
       - --collation-server=utf8mb4_unicode_ci
-      - --max_connections=500  # Увеличиваем для трех приложений
+      - --max_connections=500      # Увеличено для трёх приложений
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
       timeout: 10s
@@ -62,26 +62,26 @@ services:
     image: wordpress:latest
     container_name: wordpress-app-1
     restart: unless-stopped
-    expose:
-      - "80"  # Убираем ports, оставляем expose для внутренней сети
+    ports:
+      - "127.0.0.1:8081:80"        # Доступна только с localhost:8081
     environment:
       WORDPRESS_DB_HOST: wordpress-db:3306
       WORDPRESS_DB_USER: wordpress
       WORDPRESS_DB_PASSWORD: ${DB_PASSWORD:-Gh56Tyfg091df}
       WORDPRESS_DB_NAME: wordpress
+      # Рекомендуемые константы для мультисерверной среды
       WORDPRESS_CONFIG_EXTRA: |
         define('WP_CACHE', true);
         define('WP_MEMORY_LIMIT', '256M');
         define('WP_MAX_MEMORY_LIMIT', '512M');
-        define('DISABLE_WP_CRON', true);  # Отключаем встроенный cron
+        define('DISABLE_WP_CRON', true);
     volumes:
-      - wordpress_data:/var/www/html  # Общий volume для всех реплик
+      - wordpress_data:/var/www/html
       - ./uploads.ini:/usr/local/etc/php/conf.d/uploads.ini
     networks:
       - wordpress_network
     depends_on:
-      wordpress-db:
-        condition: service_healthy
+      - wordpress-db
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost/wp-admin/install.php"]
       interval: 30s
@@ -93,39 +93,8 @@ services:
     image: wordpress:latest
     container_name: wordpress-app-2
     restart: unless-stopped
-    expose:
-      - "80"
-    environment:
-      WORDPRESS_DB_HOST: wordpress-db:3306
-      WORDPRESS_DB_USER: wordpress
-      WORDPRESS_DB_PASSWORD: ${DB_PASSWORD:-Gh56Tyfg091df}
-      WORDPRESS_DB_NAME: wordpress
-      WORDPRESS_CONFIG_EXTRA: |
-        define('WP_CACHE', true);
-        define('WP_MEMORY_LIMIT', '256M');
-        define('WP_MAX_MEMORY_LIMIT', '512M');
-        define('DISABLE_WP_CRON', true);
-    volumes:
-      - wordpress_data:/var/www/html  # Тот же общий volume
-      - ./uploads.ini:/usr/local/etc/php/conf.d/uploads.ini
-    networks:
-      - wordpress_network
-    depends_on:
-      wordpress-db:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost/wp-admin/install.php"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-
-  # Третья реплика WordPress
-  wordpress-app-3:
-    image: wordpress:latest
-    container_name: wordpress-app-3
-    restart: unless-stopped
-    expose:
-      - "80"
+    ports:
+      - "127.0.0.1:8082:80"
     environment:
       WORDPRESS_DB_HOST: wordpress-db:3306
       WORDPRESS_DB_USER: wordpress
@@ -142,8 +111,37 @@ services:
     networks:
       - wordpress_network
     depends_on:
-      wordpress-db:
-        condition: service_healthy
+      - wordpress-db
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/wp-admin/install.php"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Третья реплика WordPress
+  wordpress-app-3:
+    image: wordpress:latest
+    container_name: wordpress-app-3
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8083:80"
+    environment:
+      WORDPRESS_DB_HOST: wordpress-db:3306
+      WORDPRESS_DB_USER: wordpress
+      WORDPRESS_DB_PASSWORD: ${DB_PASSWORD:-Gh56Tyfg091df}
+      WORDPRESS_DB_NAME: wordpress
+      WORDPRESS_CONFIG_EXTRA: |
+        define('WP_CACHE', true);
+        define('WP_MEMORY_LIMIT', '256M');
+        define('WP_MAX_MEMORY_LIMIT', '512M');
+        define('DISABLE_WP_CRON', true);
+    volumes:
+      - wordpress_data:/var/www/html
+      - ./uploads.ini:/usr/local/etc/php/conf.d/uploads.ini
+    networks:
+      - wordpress_network
+    depends_on:
+      - wordpress-db
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost/wp-admin/install.php"]
       interval: 30s
@@ -159,7 +157,7 @@ volumes:
   wordpress_db_data:
     name: wordpress_db_data
   wordpress_data:
-    name: wordpress_data  # Общий volume для всех WordPress
+    name: wordpress_data      # Общий volume для файлов WordPress
 ```
 
 Создаем файл uploads.ini для увеличения лимитов загрузки файлов:
@@ -185,24 +183,45 @@ sudo vim init-wordpress.sh
 ```
 #!/bin/bash
 
-# Ожидаем запуск всех контейнеров
-sleep 10
+# Функция для установки WP-CLI в контейнер
+install_wp_cli() {
+    local container=$1
+    echo "Installing WP-CLI in $container..."
+    
+    # Скачиваем wp-cli.phar
+    docker exec $container curl -s -O https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar
+    
+    # Делаем исполняемым и перемещаем в PATH
+    docker exec $container chmod +x wp-cli.phar
+    docker exec $container mv wp-cli.phar /usr/local/bin/wp
+    
+    # Проверяем установку
+    docker exec $container wp --info --allow-root
+}
+
+# Ожидаем полной загрузки всех контейнеров
+echo "Waiting for containers to be ready..."
+sleep 15
 
 # Для каждой реплики WordPress
 for i in 1 2 3; do
-  echo "Configuring WordPress replica $i..."
-  
-  # Настраиваем WordPress для работы с несколькими серверами
-  docker exec wordpress-app-$i wp config set WP_CACHE true --type=constant --allow-root
-  docker exec wordpress-app-$i wp config set WP_REDIS_HOST redis --type=constant --allow-root
-  docker exec wordpress-app-$i wp config set WP_REDIS_PORT 6379 --type=constant --allow-root
-  docker exec wordpress-app-$i wp config set WP_REDIS_DATABASE 0 --type=constant --allow-root
-  
-  # Настраиваем URL сайта (должен быть одинаковым для всех реплик)
-  docker exec wordpress-app-$i wp option update siteurl "https://denis-otus.mtdlb.ru" --allow-root
-  docker exec wordpress-app-$i wp option update home "https://denis-otus.mtdlb.ru" --allow-root
-  
-  echo "WordPress replica $i configured."
+    container_name="wordpress-app-$i"
+    
+    echo "Configuring WordPress replica $i..."
+    
+    # Устанавливаем WP-CLI, если его нет
+    if ! docker exec $container_name which wp &>/dev/null; then
+        install_wp_cli $container_name
+    fi
+    
+    # Настройка параметров WordPress 
+    docker exec $container_name wp config set WP_CACHE true --type=constant --allow-root
+     
+    # Устанавливаем URL сайта
+    docker exec $container_name wp option update siteurl "https://denis-otus.mtdlb.ru" --allow-root
+    docker exec $container_name wp option update home "https://denis-otus.mtdlb.ru" --allow-root
+    
+    echo "WordPress replica $i configured."
 done
 
 echo "All WordPress replicas are ready!"
@@ -310,11 +329,11 @@ http {
     # Балансировка по наименьшему количеству соединений
     least_conn;
     
-    # Сервера WordPress реплик
-    server wordpress-app-1:80 max_fails=3 fail_timeout=30s;
-    server wordpress-app-2:80 max_fails=3 fail_timeout=30s;
-    server wordpress-app-3:80 max_fails=3 fail_timeout=30s;
-    
+    # Сервера WordPress реплик (ранее их определили через docker-compose)
+    server 127.0.0.1:8081 max_fails=3 fail_timeout=30s;
+    server 127.0.0.1:8082 max_fails=3 fail_timeout=30s;
+    server 127.0.0.1:8083 max_fails=3 fail_timeout=30s;
+  
     # Keepalive соединения для производительности
     keepalive 32;
     keepalive_requests 100;
@@ -326,24 +345,25 @@ server {
     listen [::]:443 ssl;
     http2 on;
 
-    server_name denis-otus.mtdlb.ru www.denis-otus.mtdlb.ru;
+    server_name denis-otus.mtdlb.ru www.denis-otus.mtdlb.ru;  #Задаёт доменные имена, для которых этот блок server будет обрабатывать запросы. Если запрос  приходит с другим именем, он может быть обработан другим блоком (или блоком по умолчанию).
 
-    # SSL настройки (оставляем без изменений)
-    ssl_certificate /etc/letsencrypt/live/denis-otus.mtdlb.ru/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/denis-otus.mtdlb.ru/privkey.pem;
-    ssl_protocols TLSv1.2 TLSv1.3;
+    # SSL настройки:
+    ssl_certificate /etc/letsencrypt/live/denis-otus.mtdlb.ru/fullchain.pem;  #Указывает путь к файлу сертификата (цепочечный PEM-файл, содержащий сертификат сервера и промежуточные сертификаты), полученный от Let's Encrypt.
+    ssl_certificate_key /etc/letsencrypt/live/denis-otus.mtdlb.ru/privkey.pem;  #Путь к закрытому ключу, соответствующему сертификату. Хранится в секрете.
+    ssl_protocols TLSv1.2 TLSv1.3;  # Поддерживаемые версии TLS-протокола
     ssl_ciphers 'ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256';
-    ssl_prefer_server_ciphers off;
-    ssl_session_timeout 1d;
-    ssl_session_cache shared:SSL:50m;
-    ssl_session_tickets off;
-    ssl_dhparam /etc/ssl/certs/dhparam.pem;
+    ssl_prefer_server_ciphers off;   #Определяет, должны ли при согласовании соединения использоваться шифры, предпочитаемые сервером, а не клиентом. Значение off означает, что клиент может выбрать шифр из списка. Современные браузеры и так выбирают наиболее безопасные шифры, поэтому off допустимо.
+
+    ssl_session_timeout 1d; # Задаёт время жизни SSL-сессии (параметры сеанса, которые можно использовать для восстановления без повторного рукопожатия). Значение 1d означает один день. Уменьшает нагрузку на сервер при повторных соединениях.
+    ssl_session_cache shared:SSL:50m;  #Включает кэш SSL-сессий, разделяемый между рабочими процессами, размером 50 мегабайт. Это позволяет значительно ускорить установление соединений для повторных визитов.
+    ssl_session_tickets off;  # Отключает использование TLS-билетов (RFC 5077). Билеты позволяют восстанавливать сессию без хранения состояния на сервере, но могут снижать безопасность (при компрометации ключа билета). Отключение рекомендуется для повышения безопасности (но немного снижает производительность).
+    ssl_dhparam /etc/ssl/certs/dhparam.pem;  #Указывает файл с параметрами Диффи-Хеллмана для обеспечения Perfect Forward Secrecy (PFS). Генерируется командой openssl dhparam -out /etc/ssl/certs/dhparam.pem 2048 (или 4096).
 
     # Базовые лимиты (оставляем без изменений)
-    client_max_body_size 10M;
-    client_body_buffer_size 128k;
-    client_header_buffer_size 1k;
-    large_client_header_buffers 4 8k;
+    client_max_body_size 10M;  #Ограничивает максимальный размер тела запроса клиента (например, загружаемых файлов). Значение 10 мегабайт предотвращает перегрузку сервера слишком большими запросами.
+    client_body_buffer_size 128k;  #Задаёт размер буфера для чтения тела запроса. Если тело запроса больше этого буфера, оно записывается во временный файл. Значение 128 КБ оптимизирует использование памяти.
+    client_header_buffer_size 1k;  #Размер буфера для чтения заголовков запроса. Для большинства запросов достаточно 1 КБ.
+    large_client_header_buffers 4 8k;  #Задаёт максимальное количество и размер буферов для больших заголовков (например, при длинных куки или сложных URI). Если заголовки превышают client_header_buffer_size, используются эти буферы. Значение 4 8k означает 4 буфера по 8 КБ.
 
     # Таймауты защиты
     client_body_timeout 5s;
@@ -358,7 +378,7 @@ server {
 
     # Rate limiting
     limit_req zone=req_limit_per_ip burst=50 nodelay;
-    limit_req_status 429;
+    limit_req_status 429;  #Устанавливает HTTP-код ответа при превышении лимита запросов (rate limiting). 429 Too Many Requests — стандартный код для этой ситуации.
 
     # Security headers (оставляем без изменений)
     add_header Strict-Transport-Security "max-age=63072000; includeSubDomains; preload" always;
@@ -370,15 +390,15 @@ server {
     add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self';" always;
 
     # Настройки кэширования (оставляем без изменений)
-    proxy_cache_key "$scheme$request_method$host$request_uri";
-    proxy_cache_valid 200 302 10m;
-    proxy_cache_valid 404 1m;
-    proxy_cache_bypass $cookie_nocache $arg_nocache;
-    proxy_no_cache $cookie_nocache $arg_nocache;
+    proxy_cache_key "$scheme$request_method$host$request_uri";  #Определяет ключ, по которому кэшируются ответы. В данном случае ключ формируется из схемы (http/https), метода запроса, хоста и URI. Это гарантирует уникальность кэша для разных запросов.
+    proxy_cache_valid 200 302 10m;  #Указывает, что ответы с кодами 200 и 302 должны кэшироваться на 10 минут.
+    proxy_cache_valid 404 1m;  #Ответы с кодом 404 кэшируются на 1 минуту (чтобы не перегружать бэкенд частыми запросами к несуществующим страницам).
+    proxy_cache_bypass $cookie_nocache $arg_nocache;  #Указывает условия, при которых кэш обходится (запрос идёт напрямую к бэкенду). Если переменная $cookie_nocache или $arg_nocache не пуста, кэш не используется. Это позволяет клиентам управлять кэшированием через cookie или параметры запроса.
+    proxy_no_cache $cookie_nocache $arg_nocache;  #Определяет условия, при которых ответ не кэшируется (даже если прокси-кэш включён). Работает аналогично proxy_cache_bypass, но влияет на сохранение ответа в кэш, а не на его выдачу.
 
     # Основной location с балансировкой
     location / {
-        proxy_pass http://wordpress_backend;
+        proxy_pass http://wordpress_backend;   #Указывает адрес бэкенд-сервера, куда будут перенаправляться запросы. В данном случае это локальный сервер на порту 8080 
         
         # Важные заголовки для WordPress
         proxy_set_header Host $host;
@@ -626,15 +646,13 @@ docker-compose ps
 
 ```
 zubahin@compute-vm-3:~/project$ sudo docker-compose ps
-     Name                    Command                       State                  Ports       
-----------------------------------------------------------------------------------------------
-wordpress-app-1   docker-entrypoint.sh apach ...   Up (health: starting)   80/tcp             
-wordpress-app-2   docker-entrypoint.sh apach ...   Up (health: starting)   80/tcp             
-wordpress-app-3   docker-entrypoint.sh apach ...   Up (health: starting)   80/tcp             
-wordpress-db      docker-entrypoint.sh --def ...   Up (healthy)            3306/tcp, 33060/tcp
+     Name                    Command                       State                   Ports         
+-------------------------------------------------------------------------------------------------
+wordpress-app-1   docker-entrypoint.sh apach ...   Up (health: starting)   127.0.0.1:8081->80/tcp
+wordpress-app-2   docker-entrypoint.sh apach ...   Up (health: starting)   127.0.0.1:8082->80/tcp
+wordpress-app-3   docker-entrypoint.sh apach ...   Up (health: starting)   127.0.0.1:8083->80/tcp
+wordpress-db      docker-entrypoint.sh --def ...   Up (health: starting)   3306/tcp, 33060/tcp  
 ```
-
-
 
 
 Проверим, что все реплики WordPress подключены к БД
@@ -643,10 +661,20 @@ docker-compose logs wordpress-app-1 | tail
 docker-compose logs wordpress-app-2 | tail
 docker-compose logs wordpress-app-3 | tail
 ```
+
+Проверим, что порты 8081-8083 слушаются на хосте: 
+```
+ss -tlnp | grep 808
+```
+
+
 Выполним инициализацию WordPress
 ```
 chmod +x init-wordpress.sh
-./init-wordpress.sh
+```
+
+```
+sudo ./init-wordpress.sh
 ```
 Перезапустим Angie (после обновления конфигурации серверного блока (см. выше) )
 ```
@@ -658,6 +686,78 @@ sudo systemctl restart angie
 curl -I https://denis-otus.mtdlb.ru
 ```
 
+```
+zubahin@compute-vm-3:/etc/angie/http.d$ curl -I https://denis-otus.mtdlb.ru
+HTTP/2 200 
+server: Angie/1.11.3
+date: Tue, 17 Mar 2026 10:07:22 GMT
+content-type: text/html; charset=UTF-8
+x-powered-by: PHP/8.3.30
+link: <https://denis-otus.mtdlb.ru/wp-json/>; rel="https://api.w.org/"
+x-upstream: 127.0.0.1:8081
+x-upstream-status: 200
+
+zubahin@compute-vm-3:/etc/angie/http.d$ curl -I https://denis-otus.mtdlb.ru
+HTTP/2 200 
+server: Angie/1.11.3
+date: Tue, 17 Mar 2026 10:07:25 GMT
+content-type: text/html; charset=UTF-8
+x-powered-by: PHP/8.3.30
+link: <https://denis-otus.mtdlb.ru/wp-json/>; rel="https://api.w.org/"
+x-upstream: 127.0.0.1:8081
+x-upstream-status: 200
+
+zubahin@compute-vm-3:/etc/angie/http.d$ curl -I https://denis-otus.mtdlb.ru
+HTTP/2 200 
+server: Angie/1.11.3
+date: Tue, 17 Mar 2026 10:07:28 GMT
+content-type: text/html; charset=UTF-8
+x-powered-by: PHP/8.3.30
+link: <https://denis-otus.mtdlb.ru/wp-json/>; rel="https://api.w.org/"
+x-upstream: 127.0.0.1:8082
+x-upstream-status: 200
+
+zubahin@compute-vm-3:/etc/angie/http.d$ curl -I https://denis-otus.mtdlb.ru
+HTTP/2 200 
+server: Angie/1.11.3
+date: Tue, 17 Mar 2026 10:07:30 GMT
+content-type: text/html; charset=UTF-8
+x-powered-by: PHP/8.3.30
+link: <https://denis-otus.mtdlb.ru/wp-json/>; rel="https://api.w.org/"
+x-upstream: 127.0.0.1:8083
+x-upstream-status: 200
+
+zubahin@compute-vm-3:/etc/angie/http.d$ curl -I https://denis-otus.mtdlb.ru
+HTTP/2 200 
+server: Angie/1.11.3
+date: Tue, 17 Mar 2026 10:07:31 GMT
+content-type: text/html; charset=UTF-8
+x-powered-by: PHP/8.3.30
+link: <https://denis-otus.mtdlb.ru/wp-json/>; rel="https://api.w.org/"
+x-upstream: 127.0.0.1:8081
+x-upstream-status: 200
+
+zubahin@compute-vm-3:/etc/angie/http.d$ curl -I https://denis-otus.mtdlb.ru
+HTTP/2 200 
+server: Angie/1.11.3
+date: Tue, 17 Mar 2026 10:07:32 GMT
+content-type: text/html; charset=UTF-8
+x-powered-by: PHP/8.3.30
+link: <https://denis-otus.mtdlb.ru/wp-json/>; rel="https://api.w.org/"
+x-upstream: 127.0.0.1:8082
+x-upstream-status: 200
+
+zubahin@compute-vm-3:/etc/angie/http.d$ curl -I https://denis-otus.mtdlb.ru
+HTTP/2 200 
+server: Angie/1.11.3
+date: Tue, 17 Mar 2026 10:07:33 GMT
+content-type: text/html; charset=UTF-8
+x-powered-by: PHP/8.3.30
+link: <https://denis-otus.mtdlb.ru/wp-json/>; rel="https://api.w.org/"
+x-upstream: 127.0.0.1:8083
+x-upstream-status: 200
+```
+
 
 ### Шаг 6.  Проверяем результаты:
 
@@ -667,9 +767,9 @@ for i in {1..10}; do
   curl -sI https://denis-otus.mtdlb.ru | grep X-Upstream
 done
 ```
-#### Мониторинг статуса контейнеров
+#### Мониторинг статуса контейнеров (из папки project)
 ```
-watch -n 1 'docker-compose ps'
+sudo watch -n 1 'docker-compose ps'
 ```
 
 #### Проверка логов Angie
