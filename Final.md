@@ -787,6 +787,87 @@ sudo tail -f /var/log/angie/access.log | grep X-Upstream
 
 
 
+```
+ab -n 1000 -c 50 https://denis-otus.mtdlb.ru/
+This is ApacheBench, Version 2.3 <$Revision: 1903618 $>
+Copyright 1996 Adam Twiss, Zeus Technology Ltd, http://www.zeustech.net/
+Licensed to The Apache Software Foundation, http://www.apache.org/
+
+Benchmarking denis-otus.mtdlb.ru (be patient)
+Completed 100 requests
+Completed 200 requests
+Completed 300 requests
+Completed 400 requests
+Completed 500 requests
+Completed 600 requests
+Completed 700 requests
+Completed 800 requests
+Completed 900 requests
+Completed 1000 requests
+Finished 1000 requests
+
+
+Server Software:        Angie/1.11.3
+Server Hostname:        denis-otus.mtdlb.ru
+Server Port:            443
+SSL/TLS Protocol:       TLSv1.3,TLS_AES_256_GCM_SHA384,256,256
+Server Temp Key:        X25519 253 bits
+TLS Server Name:        denis-otus.mtdlb.ru
+
+Document Path:          /
+Document Length:        89 bytes
+
+Concurrency Level:      50
+Time taken for tests:   71.321 seconds
+Complete requests:      1000
+Failed requests:        918
+   (Connect: 0, Receive: 0, Length: 918, Exceptions: 0)
+Non-2xx responses:      82
+Total transferred:      68602296 bytes
+HTML transferred:       68267942 bytes
+Requests per second:    14.02 [#/sec] (mean)
+Time per request:       3566.042 [ms] (mean)
+Time per request:       71.321 [ms] (mean, across all concurrent requests)
+Transfer rate:          939.34 [Kbytes/sec] received
+
+Connection Times (ms)
+              min  mean[+/-sd] median   max
+Connect:        3   15  20.0      9     148
+Processing:     2 3526 1268.3   3760    8059
+Waiting:        2 3411 1234.1   3634    7863
+Total:          6 3541 1260.2   3772    8064
+
+Percentage of the requests served within a certain time (ms)
+  50%   3772
+  66%   3983
+  75%   4094
+  80%   4172
+  90%   4440
+  95%   4724
+  98%   6156
+  99%   6920
+ 100%   8064 (longest request)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
