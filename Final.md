@@ -578,11 +578,11 @@ drwxr-xr-x 4 root root 4096 Jan 28 11:17 ..
 drwxr-xr-x 2 root root 4096 Jan 28 11:30 arc
 -rw-r--r-- 1 root root 5023 Jan 29 13:11 wordpress3.conf
 drwxr-xr-x 2 root root 4096 Jan 27 19:21 sites-enabled
--rw-r--r-- 1 root root 5093 Feb  5 12:05 wordpress.conf
+-rw-r--r-- 1 root root 5093 Feb  5 12:05 secure.conf
 ```
 Старую конфигурацию переносим в архив (arc):
 ```
-sudo mv /etc/angie/http.d/wordpress.conf /etc/angie/http.d/arc
+sudo mv /etc/angie/http.d/secure.conf /etc/angie/http.d/arc
 ```
 
 ### Шаг 5.  Создаем .env файл в папке проекта, устанавливаем docker-compose  и запускаем docker-compose:
@@ -610,7 +610,7 @@ sudo apt install docker-compose
 Останавливаем все контейнеры (если уже был установлен):
 
 ```
-docker-compose down
+sudo docker-compose down
 ```
 
 Запускаем docker-compose (после обновления YAML файла (см. выше) ):
@@ -623,6 +623,20 @@ sudo docker-compose up -d
 ```
 docker-compose ps
 ```
+
+```
+zubahin@compute-vm-3:~/project$ sudo docker-compose ps
+     Name                    Command                       State                  Ports       
+----------------------------------------------------------------------------------------------
+wordpress-app-1   docker-entrypoint.sh apach ...   Up (health: starting)   80/tcp             
+wordpress-app-2   docker-entrypoint.sh apach ...   Up (health: starting)   80/tcp             
+wordpress-app-3   docker-entrypoint.sh apach ...   Up (health: starting)   80/tcp             
+wordpress-db      docker-entrypoint.sh --def ...   Up (healthy)            3306/tcp, 33060/tcp
+```
+
+
+
+
 Проверим, что все реплики WordPress подключены к БД
 ```
 docker-compose logs wordpress-app-1 | tail
