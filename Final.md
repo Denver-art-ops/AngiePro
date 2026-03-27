@@ -231,40 +231,75 @@ echo "All WordPress replicas are ready!"
 ###  Шаг 3.  Базовую конфигурацию Angie оставляем без изменений:
 
 ```
+# Задает пользователя, от имени которого будут запускаться рабочие процессы.Будем использовать системного пользователя 'angie' для минимизации прав доступа.
 user  angie;
+# Определяем количество рабочих процессов.
+# Значение 'auto' позволяет Angie автоматически определить оптимальное количество
+# (обычно равное количеству ядер процессора) для максимальной производительности.
 worker_processes  auto;
+# Устанавливаем максимальное количество файловых дескрипторов (открытых файлов),
+# которое может открыть один рабочий процесс. 65536 - это высокая нагрузка,
+# необходимая для обработки большого количества одновременных соединений.
 worker_rlimit_nofile 65536;
 
 # Загружаем модуль GeoIP
+# Директива load_module подключает динамический модуль GeoIP2,
+# который позволяет определять географическое положение клиента по IP-адресу.
 load_module modules/angie-module-geoip2;
 
-
+# Настройка логирования ошибок.
+# Указывает файл для записи ошибок и уровень логирования 'notice'.
+# Уровень notice записывает важные уведомления, но не захламляет лог отладочной информацией.
 error_log  /var/log/angie/error.log notice;
+# Указывает путь к файлу, в котором хранится PID (идентификатор процесса) основного процесса Angie.
+# Этот файл используется для управления процессом (остановка, перезагрузка).
 pid        /run/angie.pid;
 
+# Блок events отвечает за настройки работы соединений и механизма обработки событий.
 events {
+
+    # Максимальное количество одновременных соединений для одного рабочего процесса.
+    # При worker_processes auto (допустим, 8 ядер) общее максимальное количество соединений
+    # составит 8 * 65536 = 524288.
     worker_connections  65536;
 }
 
-
+# Основной блок http содержит настройки для работы веб-сервера, прокси и обработки HTTP-трафика.
 http {
+
+  # Подключает файл mime.types, который содержит соответствие между расширениями файлов
+    # и MIME-типами (например, .html -> text/html, .css -> text/css).
     include       /etc/angie/mime.types;
+   # MIME-тип по умолчанию. Если расширение файла не найдено в mime.types,
+   # сервер будет отдавать файл как application/octet-stream (загрузка файла, а не отображение).
     default_type  application/octet-stream;
 
-# Путь к базе стран GeoIP
-  load_module modules/angie-module-geoip2;  -неверная запись хотя у angie так пакет и называется
-  load_module modules/ngx_http_geoip2_module.so;
+    # Путь к базе стран GeoIP
+    # load_module modules/angie-module-geoip2; -неверная запись хотя у angie так пакет и называется
+    
+    # Правильная загрузка модуля GeoIP2 для работы внутри блока http.
+    # Модуль ngx_http_geoip2_module.so предоставляет переменные для геолокации.
+    load_module modules/ngx_http_geoip2_module.so;
 
     # Создаём переменную $allowed_country: 1 для RU, 0 для остальных
+    # Если код страны (из переменной $geoip_country_code) равен RU, переменная получает значение 1,
+    # иначе (по умолчанию) — 0. Используется для фильтрации трафика по странам.
     geo $allowed_country {
         default 0;
         $geoip_country_code RU 1;
     }
 
+    # Базовый формат лога 'main'. Содержит стандартную информацию:
+    # IP клиента, пользователь (если есть аутентификация), время запроса, сам запрос,
+    # статус ответа, размер ответа, referer, user-agent и заголовок X-Forwarded-For.
     log_format  main  '$remote_addr - $remote_user [$time_local] "$request" '
                       '$status $body_bytes_sent "$http_referer" '
                       '"$http_user_agent" "$http_x_forwarded_for"';
 
+    # Расширенный формат лога 'extended'. Добавляет информацию о кэшировании,
+    # имени сервера, времени выполнения запроса ($request_time),
+    # времени соединения с upstream ($upstream_connect_time) и другие детали,
+    # критически важные для отладки и анализа производительности.
     log_format extended '$remote_addr - $remote_user [$time_local] "$request" '
                         '$status $body_bytes_sent "$http_referer" rt="$request_time" '
                        '"$http_user_agent" "$http_x_forwarded_for" '
@@ -273,6 +308,9 @@ http {
                         'uct="$upstream_connect_time" urt="$upstream_response_time"';
 
     # Новый формат лога security
+    # Специализированный формат лога 'security' для отслеживания безопасности.
+    # Включает статусы ограничений запросов (limit_req_status) и соединений (limit_conn_status),
+    # что помогает анализировать срабатывания защиты от DDoS и брутфорса.
     log_format security '$remote_addr - $remote_user [$time_local] '
                        '"$request" $status $body_bytes_sent '
                        '"$http_referer" "$http_user_agent" '
@@ -282,36 +320,73 @@ http {
                        'limit_req_status=$limit_req_status '
                        'limit_conn_status=$limit_conn_status';
 
+    # Указывает файл для access-логов и использует формат 'main' по умолчанию.
     access_log  /var/log/angie/access.log  main;
 
     # Глобальные лимиты соединений
+
+    # Определяет зону разделяемой памяти (10 МБ) для ограничения количества соединений.
+    # Ключом является IP-адрес клиента ($binary_remote_addr). Используется для ограничения
+    # максимального числа одновременных соединений с одного IP.
     limit_conn_zone $binary_remote_addr zone=conn_limit_per_ip:10m;
+
+    # Определяет зону для ограничения частоты запросов (rate limiting).
+    # Ключ — IP клиента, зона 10 МБ, лимит — 30 запросов в секунду.
     limit_req_zone $binary_remote_addr zone=req_limit_per_ip:10m rate=30r/s;
 
-    # Зона для медленных соединений
+    # Зона для ограничения медленных соединений (отдельная зона по имени сервера).
+    # Может использоваться для защиты от Slowloris атак.
     limit_conn_zone $server_name zone=slow_conn:10m;
 
-    # Дополнительные зоны для rate limiting
+    # Дополнительные зоны для более тонкого rate limiting:
+    # login_limit: 5 запросов в минуту для защиты страниц авторизации (брутфорс).
     limit_req_zone $binary_remote_addr zone=login_limit:10m rate=5r/m;
+    # api_limit: 10 запросов в секунду для API-эндпоинтов.
     limit_req_zone $binary_remote_addr zone=api_limit:10m rate=10r/s;
+    # static_limit: 100 запросов в секунду для статики (достаточно высокий лимит).
     limit_req_zone $binary_remote_addr zone=static_limit:10m rate=100r/s;
+
     # Настройки кэширования
+
+    # Настройки кэширования для прокси (основной кэш):
+    # /var/cache/angie — путь к кэшу,
+    # levels=1:2 — иерархическая структура каталогов (2 уровня),
+    # keys_zone=proxy_cache:100m — имя зоны и размер памяти для ключей (100 МБ),
+    # max_size=1g — максимальный размер кэша на диске (1 ГБ),
+    # inactive=60m — время хранения неиспользуемых данных (60 минут),
+    # use_temp_path=off — отключает временное хранение (запись сразу в кэш).
     proxy_cache_path /var/cache/angie levels=1:2 keys_zone=proxy_cache:100m
                      max_size=1g inactive=60m use_temp_path=off;
 
+    # Кэш для статического контента. Отличается увеличенным временем хранения (365 дней),
+    # так как статические файлы (изображения, CSS, JS) меняются редко.
     proxy_cache_path /var/cache/angie/static levels=1:2 keys_zone=static_cache:50m
                      max_size=500m inactive=365d use_temp_path=off;
 
+    # Включает использование системного вызова sendfile для ускоренной отдачи статического контента
+    # (минуя пользовательское пространство, копирование "ядро-ядро").
     sendfile        on;
-    #tcp_nopush     on;
 
+    # tcp_nopush on; (закомментировано) — при включении вместе с sendfile оптимизирует отправку
+    # пакетов, отправляя заголовки и файл одним пакетом (уменьшает задержки).
+
+    # Таймаут для keep-alive соединений (в секундах).
+    # Определяет, сколько времени сервер будет ждать новый запрос от клиента
+    # после завершения предыдущего, прежде чем закрыть соединение.
     keepalive_timeout  65;
 
-    #gzip  on;
+    # gzip on; (закомментировано) — включение сжатия ответов.
+    # Сжатие снижает трафик, но увеличивает нагрузку на CPU.
+    
 
+    # Подключает все конфигурационные файлы виртуальных хостов (server blocks)
+    # из директории /etc/angie/http.d/ с расширением .conf.
+    # Это позволяет модульно организовывать конфигурацию для разных сайтов.
     include /etc/angie/http.d/*.conf;
 }
 
+# Блок stream закомментирован. Он используется для проксирования TCP/UDP трафика
+# (балансировка нагрузки на базы данных, SMTP, SSH и т.д.).
 #stream {
 #    include /etc/angie/stream.d/*.conf;
 #} 
