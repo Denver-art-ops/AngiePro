@@ -399,7 +399,7 @@ http {
 Меняем содержимое конфигурации в /etc/angie/http.d/wordpress3.conf
 
 ```
-    # Определение upstream для балансировки WordPress реплик
+    # Определение upstream для балансировки WordPress реплик. Имя wordpress_backend используется далее в proxy_pass.
     upstream wordpress_backend {
     # Балансировка по наименьшему количеству соединений
     least_conn;
@@ -410,23 +410,30 @@ http {
     server 127.0.0.1:8083 max_fails=3 fail_timeout=30s;
   
     # Keepalive соединения для производительности
+    #Максимальное количество keepalive-соединений (постоянно открытых) к каждому серверу upstream, которые будут храниться в кэше соединений рабочего процесса.       #важно для снижения накладных расходов на установку TCP-соединений.
     keepalive 32;
+    #Максимальное количество запросов, которые можно передать через одно keepalive-соединение, прежде чем оно будет закрыто.
     keepalive_requests 100;
+    #Таймаут бездействия для keepalive-соединений. Если соединение не используется в течение 60 секунд, оно закрывается.
     keepalive_timeout 60s;
 }
 
 server {
+    #Указывает, что сервер слушает TCP-порт 443 (стандартный HTTPS) с обязательным использованием SSL/TLS.
     listen 443 ssl;
     listen [::]:443 ssl;
+    #Включает протокол HTTP/2, который повышает производительность за счет мультиплексирования, сжатия заголовков и приоритизации запросов.
     http2 on;
 
-    server_name denis-otus.mtdlb.ru www.denis-otus.mtdlb.ru;  #Задаёт доменные имена, для которых этот блок server будет обрабатывать запросы. Если запрос  приходит с другим именем, он может быть обработан другим блоком (или блоком по умолчанию).
+    #Задаёт доменные имена, для которых этот блок server будет обрабатывать запросы. Если запрос  приходит с другим именем, он может быть обработан другим блоком     #(или блоком по умолчанию  или будет отклонен).
+    server_name denis-otus.mtdlb.ru www.denis-otus.mtdlb.ru;  
 
     # SSL настройки:
-    ssl_certificate /etc/letsencrypt/live/denis-otus.mtdlb.ru/fullchain.pem;  #Указывает путь к файлу сертификата (цепочечный PEM-файл, содержащий сертификат сервера и промежуточные сертификаты), полученный от Let's Encrypt.
+    # Указывают пути к SSL-сертификату и приватному ключу, полученным от Let's Encrypt.
+    ssl_certificate /etc/letsencrypt/live/denis-otus.mtdlb.ru/fullchain.pem; 
     ssl_certificate_key /etc/letsencrypt/live/denis-otus.mtdlb.ru/privkey.pem;  #Путь к закрытому ключу, соответствующему сертификату. Хранится в секрете.
     ssl_protocols TLSv1.2 TLSv1.3;  # Поддерживаемые версии TLS-протокола
-    ssl_ciphers 'ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256';
+    ssl_ciphers 'ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256';  # Поддерживаемые шифры
     ssl_prefer_server_ciphers off;   #Определяет, должны ли при согласовании соединения использоваться шифры, предпочитаемые сервером, а не клиентом. Значение off означает, что клиент может выбрать шифр из списка. Современные браузеры и так выбирают наиболее безопасные шифры, поэтому off допустимо.
 
     ssl_session_timeout 1d; # Задаёт время жизни SSL-сессии (параметры сеанса, которые можно использовать для восстановления без повторного рукопожатия). Значение 1d означает один день. Уменьшает нагрузку на сервер при повторных соединениях.
@@ -441,31 +448,48 @@ server {
     large_client_header_buffers 4 8k;  #Задаёт максимальное количество и размер буферов для больших заголовков (например, при длинных куки или сложных URI). Если заголовки превышают client_header_buffer_size, используются эти буферы. Значение 4 8k означает 4 буфера по 8 КБ.
 
     # Таймауты защиты
-    client_body_timeout 5s;
-    client_header_timeout 5s;
-    send_timeout 5s;
-    keepalive_timeout 15s;
-    keepalive_requests 100;
+    client_body_timeout 5s;  #Время ожидания между чтением частей тела запроса.
+    client_header_timeout 5s; #Время ожидания между чтением заголовков запроса.
+    send_timeout 5s; #Таймаут передачи ответа клиенту.
+    keepalive_timeout 15s;  #Таймаут, в течение которого keepalive-соединение с клиентом будет оставаться открытым в ожидании следующего запроса.
+    keepalive_requests 100; #Максимальное количество запросов по одному клиентскому keepalive-соединению.
 
     # Лимиты соединений
+
+    #  Ограничивает количество одновременных соединений. conn_limit_per_ip — зона, определенная ранее (обычно с привязкой к $binary_remote_addr), допускающая не      #  более 100 соединений с одного IP.
     limit_conn conn_limit_per_ip 100;
+
+    # Другая зона (для медленных клиентов), допускающая до 1000 соединений.
     limit_conn slow_conn 1000;
 
     # Rate limiting
+    #Ограничивает частоту запросов (rate limiting). Использует зону req_limit_per_ip (определенную ранее в конфигурации)
+    #Позволяет создать очередь из 50 запросов сверх установленной скорости  nodelay заставляет отвечать на запросы из очереди немедленно, но счетчик задержек все     # равно применяется.
     limit_req zone=req_limit_per_ip burst=50 nodelay;
-    limit_req_status 429;  #Устанавливает HTTP-код ответа при превышении лимита запросов (rate limiting). 429 Too Many Requests — стандартный код для этой ситуации.
+    #Устанавливает HTTP-код ответа при превышении лимита запросов (rate limiting). 429 Too Many Requests — стандартный код для этой ситуации.
+    limit_req_status 429;  
 
     # Security headers (оставляем без изменений)
+    #Заставляет браузер всегда использовать HTTPS для этого домена и субдоменов в течение 2 лет. preload указывает на возможность включения в предустановленный       #список HSTS браузеров.
     add_header Strict-Transport-Security "max-age=63072000; includeSubDomains; preload" always;
-    add_header X-Content-Type-Options "nosniff" always;
-    add_header X-Frame-Options "SAMEORIGIN" always;
-    add_header X-XSS-Protection "1; mode=block" always;
+
+    add_header X-Content-Type-Options "nosniff" always; #Запрещает браузеру MIME-сниффинг, предотвращая атаки на основе подмены типа контента.
+    add_header X-Frame-Options "SAMEORIGIN" always;  #Разрешает отображение страницы только во фреймах с тем же источником, защищая от кликджекинга.
+    add_header X-XSS-Protection "1; mode=block" always;  #Включает фильтр XSS в старых браузерах и переводит его в режим блокировки страницы.
+
+    #Управляет передачей Referer: при переходе на другой источник передается только источник (без полного пути), а на HTTPS→HTTP не передается ничего.
     add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+
+    # Отключает доступ к API геолокации, микрофона, камеры и платежей для всех источников.
     add_header Permissions-Policy "geolocation=(), microphone=(), camera=(), payment=()" always;
+
+    # CSP: Белый список источников контента. default-src 'self' — разрешает загрузку ресурсов только с текущего домена. style-src 'unsafe-inline' необходим для       # некоторых плагинов WP, но снижает безопасность. img-src 'self' data: разрешает изображения с текущего домена и data:URI.
     add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self';" always;
 
     # Настройки кэширования (оставляем без изменений)
-    proxy_cache_key "$scheme$request_method$host$request_uri";  #Определяет ключ, по которому кэшируются ответы. В данном случае ключ формируется из схемы (http/https), метода запроса, хоста и URI. Это гарантирует уникальность кэша для разных запросов.
+    #Определяет ключ, по которому кэшируются ответы. В данном случае ключ формируется из схемы (http/https), метода запроса, хоста и URI. Это гарантирует
+    #уникальность кэша для разных запросов.
+    proxy_cache_key "$scheme$request_method$host$request_uri";  
     proxy_cache_valid 200 302 10m;  #Указывает, что ответы с кодами 200 и 302 должны кэшироваться на 10 минут.
     proxy_cache_valid 404 1m;  #Ответы с кодом 404 кэшируются на 1 минуту (чтобы не перегружать бэкенд частыми запросами к несуществующим страницам).
     proxy_cache_bypass $cookie_nocache $arg_nocache;  #Указывает условия, при которых кэш обходится (запрос идёт напрямую к бэкенду). Если переменная $cookie_nocache или $arg_nocache не пуста, кэш не используется. Это позволяет клиентам управлять кэшированием через cookie или параметры запроса.
@@ -476,6 +500,17 @@ server {
         proxy_pass http://wordpress_backend;   #Указывает адрес бэкенд-сервера, куда будут перенаправляться запросы. В данном случае это локальный сервер на порту 8080 
         
         # Важные заголовки для WordPress
+
+        # proxy_set_header: Переопределяют заголовки, передаваемые бэкенду.
+        # Host: Оригинальный хост клиента.
+        # X-Real-IP: Реальный IP клиента.
+        # X-Forwarded-For: Цепочка IP прокси-серверов и клиента.
+        # X-Forwarded-Proto: Исходный протокол (http/https). Важен для WordPress, чтобы он генерировал правильные ссылки и определял HTTPS-окружение.
+        # X-Forwarded-Host Передает целевой серверу (бэкенду) оригинальное значение заголовка Host, которое пришло от клиента в запросе к прокси-серверу (Angie)
+        # X-Forwarded-Port Передает бэкенду порт, на котором прокси-сервер (Angie) принял соединение от клиента.
+        # X-Forwarded-Server Передает бэкенду имя сервера (виртуального хоста), который обработал запрос на стороне прокси-сервера Angie.
+        # X-Original-URI Передает бэкенду полный оригинальный URI запроса в том виде, в котором он пришел от клиента, до каких-либо изменений со стороны прокси
+        # (например, до применения rewrite или proxy_pass с изменением пути).
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -488,16 +523,19 @@ server {
         proxy_set_header X-Original-URI $request_uri;
         
         # Перенаправления
+        # proxy_redirect: Исправляет заголовок Location в ответах бэкенда. Если WordPress возвращает редирект на http://wordpress_backend/..., он заменяется на           # https://denis-otus.mtdlb.ru/..., предотвращая утечку внутренних имен и обеспечение корректного редиректа через HTTPS.
         proxy_redirect http://wordpress_backend/ https://$host/;
         proxy_redirect http://$host/ https://$host/;
         
         # Оптимизация прокси
+        # Включает буферизацию ответов бэкенда. Это позволяет серверу работать с медленными клиентами, не блокируя соединение с бэкендом.
+        # Размеры буферов оптимизируют использование памяти.
         proxy_buffering on;
         proxy_buffer_size 4k;
         proxy_buffers 8 4k;
         proxy_busy_buffers_size 8k;
         
-        # Таймауты (адаптированы для балансировки)
+        # Таймауты соединения с бэкендом, отправки данных на бэкенд и чтения ответа от бэкенда.
         proxy_connect_timeout 5s;
         proxy_send_timeout 10s;
         proxy_read_timeout 10s;
@@ -505,15 +543,20 @@ server {
         # Для sticky sessions (если потребуется привязка к серверу в будущем)
         proxy_cookie_path ~*^/ /;
         
-        # Заголовки для отладки балансировки
+       # Отладочные заголовки, показывающие, на какой конкретный бэкенд (IP:порт) попал запрос и какой статус ответа он вернул.
+       # Полезны для диагностики балансировки.
         add_header X-Upstream $upstream_addr always;
         add_header X-Upstream-Status $upstream_status always;
         
         # Rate limiting
+        # Дополнительный rate limit для основного location с более строгой очередью. delay=20 означает,
+        # что первые 20 запросов из очереди burst будут обработаны без задержки,
+        # а оставшиеся 10 — с задержкой, замедляя, но не отбрасывая слишком активных клиентов.
         limit_req zone=req_limit_per_ip burst=30 delay=20;
     }
 
     # Статические файлы (оптимизировано для нескольких бэкендов)
+    # Обрабатывает запросы к статическим файлам, передавая их на те же бэкенды WordPress. Это позволяет бэкендам вести логи обращений к статике.
     location ~* \.(jpg|jpeg|png|gif|ico|css|js|svg|woff|woff2|ttf|eot|webp|avif)$ {
         proxy_pass http://wordpress_backend;
         proxy_set_header Host $host;
@@ -521,11 +564,15 @@ server {
         proxy_set_header X-Forwarded-Proto $scheme;
         
         # Кэширование статики
+        # Сильное кэширование на стороне браузера. expires 1y и immutable говорят браузеру, что файл не изменится, и его можно кэшировать на год.
         expires 1y;
         add_header Cache-Control "public, immutable";
         add_header X-Content-Type-Options "nosniff";
         
         # Кэширование на стороне Angie
+        # Использует выделенную зону кэша static_cache (должна быть определена ранее).
+        # Кэширует статику на 365 дней. proxy_cache_use_stale позволяет отдавать устаревший кэш,
+        # если бэкенд недоступен или отвечает ошибкой, повышая отказоустойчивость.
         proxy_cache static_cache;
         proxy_cache_valid 200 302 365d;
         proxy_cache_valid 404 1d;
@@ -546,7 +593,8 @@ server {
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-Proto $scheme;
         
-        # GeoIP проверка
+        # GeoIP проверка: Использует модуль GeoIP2. Если страна клиента не Россия (RU),
+        # возвращается ошибка 403. Это жесткое ограничение доступа к форме логина по географическому признаку.
         if ($geoip2_country_code != "RU") {
             return 403;
         }
