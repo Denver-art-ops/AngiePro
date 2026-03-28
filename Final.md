@@ -600,19 +600,25 @@ server {
         }
         
         # Строгий rate limiting для логина
+        #Строгое ограничение частоты запросов к форме логина. Например, login_limit может быть установлена как 1r/s (один запрос в секунду), а burst=3 позволяет          #кратковременный всплеск из 3 запросов. Защита от brute-force атак.
+        # 429 - код кастомной ошибки (описан далее)
         limit_req zone=login_limit burst=3 nodelay;
         limit_req_status 429;
         
-        # Базовая авторизация
+        # Базовая HTTP-аутентификация. Пользователь должен ввести логин и пароль из файла htpasswd даже до того, как увидит страницу логина WordPress.
+        # Дополнительный уровень безопасности.
         auth_basic "Restricted Area";
         auth_basic_user_file /etc/angie/htpasswd;
-        
+
+        # Логируются в отдельный файл. proxy_no_cache и proxy_cache_bypass принудительно отключают кэширование для этой страницы,
+        # чтобы никогда не отдавать закэшированную форму логина.
         access_log /var/log/angie/auth.log;
         proxy_no_cache 1;
         proxy_cache_bypass 1;
     }
 
     # Админка WordPress
+    # Location обрабатывает все пути, начинающиеся с /wp-admin/.
     location ~ ^/wp-admin/ {
         proxy_pass http://wordpress_backend;
         proxy_set_header Host $host;
@@ -620,6 +626,7 @@ server {
         proxy_set_header X-Forwarded-Proto $scheme;
         
         # GeoIP проверка
+        # Аналогично wp-login.php, доступ к админке разрешен только из России.
         if ($geoip2_country_code != "RU") {
             return 403;
         }
@@ -627,30 +634,32 @@ server {
         # Сниженные ограничения для админки
         limit_req zone=req_limit_per_ip burst=50 nodelay;
         
-        # Отключаем кэш
+        # Отключаем кэш.  Админка не кэшируется, чтобы данные всегда были актуальными.
         proxy_no_cache 1;
         proxy_cache_bypass 1;
         
-        # Увеличенные таймауты для админки
+        # Увеличенные таймауты для админки, так как операции в админке (импорт, обновления) могут выполняться долго.
         proxy_connect_timeout 30s;
         proxy_read_timeout 60s;
     }
 
-    # API endpoint
+    # API endpoint  Обрабатывает запросы к API (например, REST API WordPress).
     location ~ ^/api/ {
         proxy_pass http://wordpress_backend;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-Proto $scheme;
         
-        # Rate limiting для API
+        # Rate limiting для API Специфическое ограничение частоты для API. Зона api_limit может иметь более высокую пропускную способность, чем основной лимит.
         limit_req zone=api_limit burst=20 nodelay;
         
-        # API заголовки
+        # API заголовки. Информационные заголовки о версии API и лимите.
         add_header X-API-Version "1.0" always;
         add_header X-RateLimit-Limit "10" always;
         
         # Кэширование API
+        # Кэширование ответов API (только GET и HEAD) на короткое время (10 секунд).
+        # Ключ кэша включает аргументы строки запроса ($args), что важно для API с параметрами.
         proxy_cache proxy_cache;
         proxy_cache_valid 200 10s;
         proxy_cache_methods GET HEAD;
@@ -658,6 +667,8 @@ server {
     }
 
     # Let's Encrypt
+    # Специальный location для верификации домена Let's Encrypt.
+    # Отвечает на запросы /.well-known/acme-challenge/ статическими файлами из указанной директории. allow all отключает любые ограничения доступа
     location ^~ /.well-known/acme-challenge/ {
         root /var/www/denis-otus.mtdlb.ru/html;
         allow all;
@@ -671,6 +682,8 @@ server {
     error_page 403 =403 /403.html;
     error_page 404 =404 /404.html;
     error_page 502 503 504 /50x.html;
+
+    #internal — location доступен только для внутренних редиректов (из error_page). Возвращает JSON-ответ с кодом 4xx.
 
     location = /429.html {
         internal;
@@ -686,25 +699,34 @@ server {
         return 403 '{"error": "Forbidden", "message": "Access denied"}';
     }
 
-    # Логирование
+    # Раздельное логирование:
+    # Основной access log с форматом security.
+    # error log уровня warn и выше.
+    # Лог security.log записывается только когда сработал rate limit ($limit_req_status не пуст).
+    # Лог slow.log записывается только для запросов, время обработки которых превысило 5 секунд.
+
     access_log /var/log/angie/access.log security;
     error_log /var/log/angie/error.log warn;
     access_log /var/log/angie/security.log security if=$limit_req_status;
     access_log /var/log/angie/slow.log security if=$request_time>5;
 }
 
-# HTTP редирект (оставляем ваш)
+# HTTP редирект
 server {
-    listen 80;
+    listen 80;   # Слушает 80-й порт (HTTP) для указанных доменных имен.
     listen [::]:80;
     server_name denis-otus.mtdlb.ru www.denis-otus.mtdlb.ru;
 
+
+    # Копия location для acme-challenge, чтобы Let's Encrypt мог проходить верификацию через HTTP.
     location ^~ /.well-known/acme-challenge/ {
         root /var/www/denis-otus.mtdlb.ru/html;
         allow all;
         try_files $uri =404;
         access_log off;
     }
+    # Все остальные запросы на HTTP получают постоянный редирект (301) на HTTPS-версию того же ресурса.
+    #  $server_name берет имя из блока, $request_uri сохраняет полный путь и параметры запроса.
 
     location / {
         return 301 https://$server_name$request_uri;
