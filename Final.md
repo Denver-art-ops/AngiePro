@@ -906,6 +906,15 @@ x-upstream-status: 200
 
 ### Шаг 6.  Проверяем результаты:
 
+
+Делаем промежуточное сканирование:
+```
+https://www.ssllabs.com/ssltest/analyze.html?d=denis-otus.mtdlb.ru
+```
+
+![Project.png](Project.png)
+
+
 #### Проверка распределения запросов (должны видеть разные upstream адреса)
 ```
 for i in {1..10}; do
@@ -929,6 +938,8 @@ sudo tail -f /var/log/angie/access.log | grep X-Upstream
 Единую базу данных для всех инстансов </br>
 Общую файловую систему (uploads, темы, плагины) </br>
 Правильную работу сессий и кэширования </br>
+
+
 
 
 
